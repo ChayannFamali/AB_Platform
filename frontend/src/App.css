@@ -1,0 +1,180 @@
+/* ─── Reset & Base ─────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f4f6f9;
+  color: #1a1a2e;
+  line-height: 1.5;
+}
+
+/* ─── Layout ────────────────────────────────────── */
+.app { min-height: 100vh; display: flex; flex-direction: column; }
+
+nav {
+  background: #1a1a2e;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  height: 56px;
+}
+nav .brand { color: #fff; font-weight: 700; font-size: 1.1rem; text-decoration: none; }
+nav a { color: #aab; text-decoration: none; font-size: 0.9rem; }
+nav a:hover { color: #fff; }
+
+main { flex: 1; padding: 2rem; max-width: 1100px; margin: 0 auto; width: 100%; }
+
+/* ─── Cards ─────────────────────────────────────── */
+.card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  margin-bottom: 1.5rem;
+}
+
+/* ─── Buttons ───────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.5rem 1rem; border-radius: 6px; border: none;
+  font-size: 0.875rem; font-weight: 500; cursor: pointer;
+  text-decoration: none; transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-primary   { background: #4f46e5; color: #fff; }
+.btn-success   { background: #059669; color: #fff; }
+.btn-danger    { background: #dc2626; color: #fff; }
+.btn-secondary { background: #e5e7eb; color: #374151; }
+.btn-sm        { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+/* ─── Status badges ─────────────────────────────── */
+.badge {
+  display: inline-block; padding: 0.2rem 0.6rem;
+  border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.badge-draft     { background: #e5e7eb; color: #6b7280; }
+.badge-running   { background: #d1fae5; color: #065f46; }
+.badge-paused    { background: #fef3c7; color: #92400e; }
+.badge-completed { background: #dbeafe; color: #1e40af; }
+
+/* ─── Tables ────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+th    { text-align: left; padding: 0.6rem 1rem; background: #f9fafb;
+        border-bottom: 2px solid #e5e7eb; color: #6b7280; font-weight: 600;
+        text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+td    { padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; }
+tr:hover td { background: #f9fafb; }
+.winner-row td { background: #f0fdf4 !important; }
+
+/* ─── Forms ─────────────────────────────────────── */
+.form-group { margin-bottom: 1.2rem; }
+label       { display: block; font-size: 0.85rem; font-weight: 500;
+              color: #374151; margin-bottom: 0.4rem; }
+input, select, textarea {
+  width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db;
+  border-radius: 6px; font-size: 0.875rem; transition: border 0.15s;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+}
+.form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-hint  { font-size: 0.75rem; color: #9ca3af; margin-top: 0.25rem; }
+
+/* ─── Alerts ────────────────────────────────────── */
+.alert         { padding: 1rem 1.25rem; border-radius: 6px; margin-bottom: 1rem; }
+.alert-danger  { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+.alert-warning { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; }
+.alert-success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+.alert-info    { background: #eff6ff; border: 1px solid #93c5fd; color: #1e40af; }
+
+/* ─── Misc ──────────────────────────────────────── */
+.page-header {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 1.5rem;
+}
+.page-title  { font-size: 1.5rem; font-weight: 700; }
+.text-muted  { color: #9ca3af; font-size: 0.85rem; }
+.text-center { text-align: center; }
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.gap-1 { gap: 0.5rem; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.loading { text-align: center; padding: 3rem; color: #9ca3af; }
+
+/* ─── Auth pages ─────────────────────────────────────── */
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f6f9;
+  padding: 2rem;
+}
+
+.auth-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.10);
+}
+
+.auth-logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: #1a1a2e;
+}
+
+.auth-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: #1a1a2e;
+}
+
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+  padding: 0.65rem;
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 1.25rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.auth-footer a {
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: 500;
+}
+.auth-footer a:hover { text-decoration: underline; }
+
+/* ─── Pagination ─────────────────────────────────────── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.pagination-info {
+  font-size: 0.85rem;
+  color: #6b7280;
+  white-space: nowrap;
+}

@@ -1,0 +1,35 @@
+# Запуск с AI:
+# docker compose -f docker-compose.yml -f docker-compose.ai.yml up -d --build
+#
+# Или через make:
+# make up-ai
+
+services:
+  ollama:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.ollama
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:latest}
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q llama || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 30
+      start_period: 600s
+  api:
+    environment:
+      AI_PROVIDER:  ollama
+      OLLAMA_URL:   http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:latest}
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama_data:

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+.pytest_cache/
+.mypy_cache/
+
+# Environment
+.env
+*.env
+
+# Node
+node_modules/
+frontend/dist/
+frontend/build/
+sdk/js/node_modules/
+
+# Docker
+*.log
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+.coverage
+htmlcov/
