@@ -3,6 +3,21 @@
 ## [Unreleased]
 
 ### Added
+- M-002: Frontend testing setup — Vitest 2.x + React Testing Library 16 +
+  jsdom 25 + @vitest/coverage-v8; `npm test` / `npm run test:run` /
+  `npm run test:coverage` / `npm run test:watch` / `npm run test:ui`
+  scripts; `vitest.config.js` (jsdom env, automatic JSX runtime,
+  coverage thresholds), `src/test/setup.js` (jest-dom matchers,
+  matchMedia/IntersectionObserver/ResizeObserver mocks, localStorage reset),
+  `src/test/utils.jsx` (`renderWithProviders` wrapping QueryClient +
+  MemoryRouter + I18nextProvider); ESLint config relaxed for test files
+  (`react-refresh/only-export-components` disabled, vitest globals enabled).
+  Smoke tests for all six pages (Login, Register, ExperimentList,
+  CreateExperiment, ExperimentResults, ApiKeysPage) and four common
+  components (EmptyState, LoadingState, ErrorBoundary, PageContainer) —
+  29 tests, all passing. API mocked at module level via `vi.mock`
+  (no MSW yet — keeps M-002 lean; MSW can be added in M-005/M-008
+  for proper HTTP-level integration tests).
 - M-001: Frontend foundation — Tailwind CSS + shadcn/ui (vendored components:
   button, card, input, label, badge, alert, dialog, dropdown-menu, tabs, tooltip,
   table, select, checkbox, switch, toast), TanStack Query v5 for server state,
@@ -54,6 +69,12 @@
 
 ### Notes
 - M-001 bundle: 28 KB CSS / 907 KB JS (277 KB gzipped).
+- M-002 tests: 29 passed, 0 failed across 10 test files
+  (`npm run test:run`).
+- M-002 coverage: 47% lines / 25% functions / 73% branches — smoke-only
+  baseline; thresholds tuned for current test count and will tighten as
+  feature-specific tests are added in M-005+ (TESTING_STRATEGY.md
+  target is 70% overall).
 - M-003 tests: 72 passed, 0 failed (`pytest tests/ -v`).
 - M-003 migration verified: `alembic upgrade head` and `downgrade -1` both run
   cleanly on the test database.
