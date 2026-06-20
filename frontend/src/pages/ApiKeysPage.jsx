@@ -1,168 +1,263 @@
-import { useEffect, useState } from 'react'
-import { createApiKey, getApiKeys, revokeApiKey } from '../api/client'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { Key, Plus, Copy, Trash2 } from 'lucide-react'
+
+import {
+  createApiKey,
+  getApiKeys,
+  revokeApiKey,
+} from '../api/client'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '../components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../components/ui/table'
+import { Alert, AlertDescription } from '../components/ui/alert'
+import EmptyState from '../components/EmptyState'
+import LoadingState from '../components/LoadingState'
+import { PageHeader } from '../components/PageContainer'
+import { toast } from '../hooks/use-toast'
 
 export default function ApiKeysPage() {
-  const [keys,       setKeys]       = useState([])
-  const [newName,    setNewName]    = useState('')
+  const { t, i18n } = useTranslation()
+  const queryClient = useQueryClient()
+  const [newName, setNewName] = useState('')
   const [createdKey, setCreatedKey] = useState(null)
-  const [loading,    setLoading]    = useState(true)
-  const [creating,   setCreating]   = useState(false)
-  const [error,      setError]      = useState('')
 
-  const load = async () => {
-    try {
-      const { data } = await getApiKeys()
-      setKeys(data)
-    } catch { setError('Ошибка загрузки ключей') }
-    finally   { setLoading(false) }
-  }
+  const keysQuery = useQuery({
+    queryKey: ['api-keys'],
+    queryFn: () => getApiKeys().then((r) => r.data),
+  })
 
-  useEffect(() => { load() }, [])
+  const createMutation = useMutation({
+    mutationFn: (name) => createApiKey({ name }),
+    onSuccess: (response) => {
+      setCreatedKey(response.data.key)
+      setNewName('')
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+      toast({ description: t('apiKeys.createSuccess') })
+    },
+    onError: (err) =>
+      toast({
+        variant: 'destructive',
+        description: err.response?.data?.detail || t('errors.serverError'),
+      }),
+  })
 
-  const handleCreate = async (e) => {
+  const revokeMutation = useMutation({
+    mutationFn: (id) => revokeApiKey(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] })
+      toast({ description: t('apiKeys.revoked', { defaultValue: 'Key revoked' }) })
+    },
+    onError: (err) =>
+      toast({
+        variant: 'destructive',
+        description: err.response?.data?.detail || t('errors.serverError'),
+      }),
+  })
+
+  const handleCreate = (e) => {
     e.preventDefault()
     if (!newName.trim()) return
-    setCreating(true)
-    setCreatedKey(null)
-    try {
-      const { data } = await createApiKey({ name: newName.trim() })
-      setCreatedKey(data.key)
-      setNewName('')
-      load()
-    } catch (e) {
-      setError(e.response?.data?.detail || 'Ошибка создания ключа')
-    } finally { setCreating(false) }
+    createMutation.mutate(newName.trim())
   }
 
-  const handleRevoke = async (id, name) => {
-    if (!confirm(`Отозвать ключ "${name}"? Это действие необратимо.`)) return
-    try {
-      await revokeApiKey(id)
-      setKeys(keys.filter(k => k.id !== id))
-    } catch { setError('Ошибка отзыва ключа') }
+  const handleRevoke = (id, name) => {
+    if (!window.confirm(t('apiKeys.revokeConfirm', { name }))) return
+    revokeMutation.mutate(id)
   }
 
-  if (loading) return <div className="loading">Загрузка...</div>
+  const handleCopy = (key) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(key).then(() =>
+        toast({ description: t('apiKeys.copied') }),
+      )
+    }
+  }
 
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">🔑 API Ключи</h1>
-      </div>
+      <PageHeader
+        title={t('apiKeys.title')}
+        icon={Key}
+      />
 
-      {/* Новый ключ — показываем ОДИН РАЗ */}
       {createdKey && (
-        <div className="alert alert-success">
-          <strong>Ключ создан!</strong> Скопируйте — он больше не будет показан полностью.
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
-            <code style={{
-              flex: 1, padding: '0.5rem', background: '#f0fdf4',
-              borderRadius: '4px', fontSize: '0.82rem', wordBreak: 'break-all',
-            }}>
-              {createdKey}
-            </code>
-            <button className="btn btn-sm btn-secondary"
-              onClick={() => navigator.clipboard.writeText(createdKey)}>
-              📋 Копировать
-            </button>
-          </div>
-          <button className="btn btn-sm btn-secondary"
-            style={{ marginTop: '0.5rem' }}
-            onClick={() => setCreatedKey(null)}>
-            Закрыть
-          </button>
-        </div>
+        <Alert variant="success" className="mb-6">
+          <AlertDescription>
+            <div className="mb-2 font-semibold">
+              {t('apiKeys.createSuccess')}
+            </div>
+            <div className="mb-2 text-sm">
+              {t('apiKeys.warning')}
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 break-all rounded bg-emerald-50 p-2 text-xs dark:bg-emerald-950">
+                {createdKey}
+              </code>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleCopy(createdKey)}
+              >
+                <Copy className="mr-1 h-4 w-4" />
+                {t('apiKeys.copy')}
+              </Button>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="mt-2"
+              onClick={() => setCreatedKey(null)}
+            >
+              {t('common.cancel')}
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      {error && <div className="alert alert-danger">{error}</div>}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">{t('apiKeys.create')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={handleCreate}
+            className="flex flex-col gap-3 sm:flex-row"
+          >
+            <div className="flex-1 space-y-1">
+              <Label htmlFor="key-name">{t('apiKeys.name')}</Label>
+              <Input
+                id="key-name"
+                placeholder="Production Backend"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                type="submit"
+                disabled={createMutation.isLoading || !newName.trim()}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                {createMutation.isLoading
+                  ? t('common.loading')
+                  : t('apiKeys.create')}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
-      {/* Создать новый ключ */}
-      <div className="card">
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>
-          Новый ключ
-        </h2>
-        <form onSubmit={handleCreate}>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <input placeholder="Название (например: Production Backend)"
-              value={newName} onChange={e => setNewName(e.target.value)}
-              style={{ flex: 1 }} />
-            <button type="submit" className="btn btn-primary" disabled={creating}>
-              {creating ? 'Создание...' : '+ Создать'}
-            </button>
-          </div>
-        </form>
-      </div>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">{t('apiKeys.title')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {keysQuery.isLoading ? (
+            <LoadingState variant="spinner" count={3} />
+          ) : keysQuery.isError ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {keysQuery.error?.response?.data?.detail ||
+                  t('errors.serverError')}
+              </AlertDescription>
+            </Alert>
+          ) : keysQuery.data?.length === 0 ? (
+            <EmptyState
+              icon={Key}
+              title={t('common.noData')}
+              description={t('apiKeys.empty')}
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('apiKeys.name')}</TableHead>
+                  <TableHead>{t('apiKeys.key')}</TableHead>
+                  <TableHead>{t('apiKeys.created')}</TableHead>
+                  <TableHead>{t('apiKeys.lastUsed')}</TableHead>
+                  <TableHead className="text-right">
+                    {t('common.actions')}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(keysQuery.data || []).map((k) => (
+                  <TableRow key={k.id}>
+                    <TableCell className="font-medium">{k.name}</TableCell>
+                    <TableCell>
+                      <code className="text-xs text-muted-foreground">
+                        {k.key_preview}
+                      </code>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(k.created_at).toLocaleDateString(
+                        i18n.language === 'en' ? 'en-US' : 'ru-RU',
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {k.last_used_at
+                        ? new Date(k.last_used_at).toLocaleString(
+                            i18n.language === 'en' ? 'en-US' : 'ru-RU',
+                          )
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleRevoke(k.id, k.name)}
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        {t('apiKeys.revoke')}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Список ключей */}
-      <div className="card">
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>
-          Ваши ключи
-        </h2>
-        {keys.length === 0 ? (
-          <p className="text-muted">Нет ключей. Создайте первый.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Название</th>
-                <th>Ключ</th>
-                <th>Создан</th>
-                <th>Последнее использование</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map(k => (
-                <tr key={k.id}>
-                  <td><strong>{k.name}</strong></td>
-                  <td>
-                    <code style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                      {k.key_preview}
-                    </code>
-                  </td>
-                  <td className="text-muted">
-                    {new Date(k.created_at).toLocaleDateString('ru-RU')}
-                  </td>
-                  <td className="text-muted">
-                    {k.last_used_at
-                      ? new Date(k.last_used_at).toLocaleString('ru-RU')
-                      : '—'}
-                  </td>
-                  <td>
-                    <button className="btn btn-sm btn-danger"
-                      onClick={() => handleRevoke(k.id, k.name)}>
-                      Отозвать
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* SDK использование */}
-      <div className="card">
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.75rem' }}>
-          Использование в SDK
-        </h2>
-        <pre style={{
-          background: '#1a1a2e', color: '#e2e8f0', padding: '1rem',
-          borderRadius: '6px', fontSize: '0.8rem', overflowX: 'auto',
-        }}>{`# Python SDK
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {t('apiKeys.sdkUsage', { defaultValue: 'SDK usage' })}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-100">
+{`# Python SDK
 from abplatform import ABPlatformClient
 client = ABPlatformClient(
     api_url="http://your-server:8000",
-    api_key="abp_ваш_ключ",
+    api_key="abp_your_key_here",
 )
 
-// JS SDK
+# JS SDK
 const client = new ABPlatformClient({
   apiUrl: 'http://your-server:8000',
-  apiKey: 'abp_ваш_ключ',
-})`}
-        </pre>
-      </div>
+  apiKey: 'abp_your_key_here',
+});`}
+          </pre>
+        </CardContent>
+      </Card>
     </>
   )
 }

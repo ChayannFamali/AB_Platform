@@ -1,89 +1,182 @@
-import { useState } from 'react'
-import { BrowserRouter, Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import ApiKeysPage       from './pages/ApiKeysPage'
-import CreateExperiment  from './pages/CreateExperiment'
-import ExperimentList    from './pages/ExperimentList'
-import ExperimentResults from './pages/ExperimentResults'
-import LoginPage         from './pages/LoginPage'
-import RegisterPage      from './pages/RegisterPage'
-import './App.css'
+import {
+  BrowserRouter,
+  Link,
+  Navigate,
+  Route,
+  Routes,
+} from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
-function ProtectedRoute({ user, children }) {
-  if (!user) return <Navigate to="/login" replace />
+import { useAuthStore } from './stores/authStore'
+import { useUiStore } from './stores/uiStore'
+import { Button } from './components/ui/button'
+import { Badge } from './components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './components/ui/dropdown-menu'
+import { Toaster } from './components/ui/toaster'
+import PageContainer from './components/PageContainer'
+
+import ApiKeysPage from './pages/ApiKeysPage'
+import CreateExperiment from './pages/CreateExperiment'
+import ExperimentList from './pages/ExperimentList'
+import ExperimentResults from './pages/ExperimentResults'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+
+function ProtectedRoute({ children }) {
+  const isAuthenticated = useAuthStore((s) => Boolean(s.user && s.token))
+  if (!isAuthenticated) return <Navigate to="/login" replace />
   return children
 }
 
 export default function App() {
-  const [user, setUser] = useState(() => {
-    try {
-      const s = localStorage.getItem('user')
-      return s ? JSON.parse(s) : null
-    } catch { return null }
-  })
+  const { t } = useTranslation()
+  const logout = useAuthStore((s) => s.logout)
+  const user = useAuthStore((s) => s.user)
+  const roles = useAuthStore((s) => s.roles)
+  const toggleTheme = useUiStore((s) => s.toggleTheme)
+  const theme = useUiStore((s) => s.theme)
+  const setLocale = useUiStore((s) => s.setLocale)
+  const locale = useUiStore((s) => s.locale)
 
-  const handleLogin  = (u) => setUser(u)
   const handleLogout = () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('user')
-    setUser(null)
+    logout()
   }
+
+  const isAuthenticated = Boolean(user)
 
   return (
     <BrowserRouter>
-      <div className="app">
+      <div className="min-h-screen bg-background text-foreground">
+        {isAuthenticated && (
+          <nav className="flex h-14 items-center gap-4 border-b bg-card px-4">
+            <Link to="/" className="font-semibold">
+              {t('common.appName')}
+            </Link>
+            <Link
+              to="/"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t('experiments.title')}
+            </Link>
+            <Link
+              to="/experiments/new"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t('experiments.new')}
+            </Link>
+            <Link
+              to="/api-keys"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t('apiKeys.title')}
+            </Link>
 
-        {user && (
-          <nav>
-            <Link to="/" className="brand">⚗️ AB Platform</Link>
-            <NavLink to="/">Эксперименты</NavLink>
-            <NavLink to="/experiments/new">+ Создать</NavLink>
+            <div className="ml-auto flex items-center gap-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    {locale === 'ru' ? 'Русский' : 'English'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>{t('common.language')}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setLocale('ru')}>
+                    Русский
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setLocale('en')}>
+                    English
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <NavLink to="/api-keys" style={{ fontSize: '0.85rem' }}>API Ключи</NavLink>
-              <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
-                {user.username}
-                {user.is_admin && (
-                  <span style={{
-                    marginLeft: '0.4rem', fontSize: '0.65rem',
-                    background: '#4f46e5', color: '#fff',
-                    padding: '0.1rem 0.4rem', borderRadius: '4px',
-                    verticalAlign: 'middle',
-                  }}>
-                    admin
-                  </span>
+              <Button variant="ghost" size="sm" onClick={toggleTheme}>
+                {theme === 'dark'
+                  ? t('common.lightMode')
+                  : t('common.darkMode')}
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {user?.username}
+                </span>
+                {Array.isArray(roles) && roles.includes('admin') && (
+                  <Badge variant="default">admin</Badge>
                 )}
-              </span>
-              <button className="btn btn-sm btn-secondary" onClick={handleLogout}>
-                Выйти
-              </button>
+              </div>
+
+              <Button variant="secondary" size="sm" onClick={handleLogout}>
+                {t('common.logout')}
+              </Button>
             </div>
           </nav>
         )}
 
-        <main style={!user ? { padding: 0, maxWidth: '100%' } : undefined}>
+        <main>
           <Routes>
-            {/* Публичные */}
-            <Route path="/login"    element={<LoginPage    onLogin={handleLogin} />} />
-            <Route path="/register" element={<RegisterPage onLogin={handleLogin} />} />
+            {/* Public routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
 
-            {/* Защищённые */}
-            <Route path="/" element={
-              <ProtectedRoute user={user}><ExperimentList /></ProtectedRoute>
-            } />
-            <Route path="/experiments/new" element={
-              <ProtectedRoute user={user}><CreateExperiment /></ProtectedRoute>
-            } />
-            <Route path="/experiments/:id" element={
-              <ProtectedRoute user={user}><ExperimentResults /></ProtectedRoute>
-            } />
-            <Route path="/api-keys" element={
-              <ProtectedRoute user={user}><ApiKeysPage /></ProtectedRoute>
-            } />
+            {/* Protected routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <ExperimentList />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/experiments/new"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <CreateExperiment />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/experiments/:id"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <ExperimentResults />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/api-keys"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <ApiKeysPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
 
-            <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
+            <Route
+              path="*"
+              element={
+                <Navigate to={isAuthenticated ? '/' : '/login'} replace />
+              }
+            />
           </Routes>
         </main>
 
+        <Toaster />
       </div>
     </BrowserRouter>
   )

@@ -1,11 +1,28 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useMutation } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { Plus } from 'lucide-react'
+
 import { createExperiment, getSampleSizeConversion } from '../api/client'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import { Checkbox } from '../components/ui/checkbox'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '../components/ui/card'
+import { Alert, AlertDescription } from '../components/ui/alert'
+import { toast } from '../hooks/use-toast'
+import { PageHeader } from '../components/PageContainer'
 
 const DEFAULT_METRIC = {
   name: '',
   event_name: '',
-  denominator_event_name: null,   // ← NEW v3: для ratio метрик
+  denominator_event_name: null,
   metric_type: 'conversion',
   is_primary: true,
   is_guardrail: false,
@@ -16,25 +33,28 @@ const DEFAULT_FORM = {
   description: '',
   traffic_percentage: 100,
   variants: [
-    { name: 'control',   traffic_split: 50 },
+    { name: 'control', traffic_split: 50 },
     { name: 'treatment', traffic_split: 50 },
   ],
   metrics: [{ ...DEFAULT_METRIC }],
 }
 
 export default function CreateExperiment() {
-  const [form, setForm]             = useState(DEFAULT_FORM)
-  const [sampleSize, setSampleSize] = useState(null)
-  const [calc, setCalc]             = useState({ baseline_rate: '', mde: '', daily_traffic: '' })
-  const [calcError, setCalcError]   = useState('')
-  const [error, setError]           = useState('')
-  const [loading, setLoading]       = useState(false)
+  const { t } = useTranslation()
   const navigate = useNavigate()
+
+  const [form, setForm] = useState(DEFAULT_FORM)
+  const [sampleSize, setSampleSize] = useState(null)
+  const [calc, setCalc] = useState({
+    baseline_rate: '',
+    mde: '',
+    daily_traffic: '',
+  })
+  const [calcError, setCalcError] = useState('')
 
   const updateMetric = (i, field, value) => {
     const metrics = [...form.metrics]
     let updated = { ...metrics[i], [field]: value }
-    // Сбросить denominator при переключении на conversion
     if (field === 'metric_type' && value === 'conversion') {
       updated.denominator_event_name = null
     }
@@ -42,324 +62,424 @@ export default function CreateExperiment() {
     setForm({ ...form, metrics })
   }
 
-  const addMetric = () => setForm({
-    ...form,
-    metrics: [...form.metrics, { ...DEFAULT_METRIC, is_primary: false }],
-  })
+  const addMetric = () =>
+    setForm({
+      ...form,
+      metrics: [...form.metrics, { ...DEFAULT_METRIC, is_primary: false }],
+    })
 
-  const removeMetric = (i) => setForm({
-    ...form,
-    metrics: form.metrics.filter((_, idx) => idx !== i),
-  })
+  const removeMetric = (i) =>
+    setForm({
+      ...form,
+      metrics: form.metrics.filter((_, idx) => idx !== i),
+    })
 
   const calcSampleSize = async () => {
     setCalcError('')
     setSampleSize(null)
 
     const baselineRate = parseFloat(calc.baseline_rate)
-    const mde          = parseFloat(calc.mde)
+    const mde = parseFloat(calc.mde)
 
     if (!calc.baseline_rate || !calc.mde) {
-      setCalcError('Заполните базовую конверсию и MDE.')
+      setCalcError(t('experiments.create.errors.fillBaselineMde'))
       return
     }
     if (isNaN(baselineRate) || isNaN(mde)) {
-      setCalcError('Введите числовые значения.')
+      setCalcError(t('experiments.create.errors.numericValues'))
       return
     }
     if (baselineRate <= 0 || baselineRate >= 1) {
-      const suggestion = (baselineRate / 100).toFixed(4)
-      setCalcError(
-        `Базовая конверсия должна быть от 0 до 1. ` +
-        `Вы ввели ${baselineRate} — имели в виду ${suggestion}? ` +
-        `(${baselineRate}% → ${suggestion})`
-      )
+      setCalcError(t('experiments.create.errors.baselineRange'))
       return
     }
     if (mde <= 0 || mde >= 1) {
-      const suggestion = (mde / 100).toFixed(4)
-      setCalcError(
-        `MDE должен быть от 0 до 1. ` +
-        `Вы ввели ${mde} — имели в виду ${suggestion}? ` +
-        `(${mde}% → ${suggestion})`
-      )
+      setCalcError(t('experiments.create.errors.mdeRange'))
       return
     }
     if (baselineRate + mde > 1) {
-      setCalcError(
-        `baseline_rate + MDE = ${(baselineRate + mde).toFixed(3)} > 1. ` +
-        `Уменьшите одно из значений.`
-      )
+      setCalcError(t('experiments.create.errors.baselinePlusMde'))
       return
     }
 
     try {
       const { data } = await getSampleSizeConversion({
         baseline_rate: baselineRate,
-        mde:           mde,
-        daily_traffic: calc.daily_traffic ? parseInt(calc.daily_traffic) : undefined,
+        mde,
+        daily_traffic: calc.daily_traffic
+          ? parseInt(calc.daily_traffic)
+          : undefined,
       })
       setSampleSize(data)
-    } catch (e) {
-      const detail = e.response?.data?.detail
-      const msg = Array.isArray(detail)
-        ? detail.map(d => d.msg).join(', ')
-        : (detail || 'Ошибка расчёта. Проверьте введённые значения.')
-      setCalcError(msg)
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      setCalcError(
+        Array.isArray(detail)
+          ? detail.map((d) => d.msg).join(', ')
+          : detail || t('experiments.create.errors.calcFailed')
+      )
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-    try {
-      const { data } = await createExperiment({
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createExperiment({
         ...form,
         traffic_percentage: Number(form.traffic_percentage),
-        variants: form.variants.map(v => ({ ...v, traffic_split: Number(v.traffic_split) })),
-        metrics: form.metrics.map(m => ({
+        variants: form.variants.map((v) => ({
+          ...v,
+          traffic_split: Number(v.traffic_split),
+        })),
+        metrics: form.metrics.map((m) => ({
           ...m,
-          // Пустая строка → null, чтобы бэкенд не получил ""
           denominator_event_name: m.denominator_event_name || null,
         })),
-      })
-      navigate(`/experiments/${data.id}`)
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Ошибка создания')
-    } finally {
-      setLoading(false)
-    }
+      }),
+    onSuccess: (response) => {
+      toast({ description: t('experiments.create.success') })
+      navigate(`/experiments/${response.data.id}`)
+    },
+    onError: (err) => {
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail)
+        ? detail.map((d) => d.msg).join(', ')
+        : detail || t('experiments.create.failed')
+      toast({ variant: 'destructive', description: msg })
+    },
+  })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    createMutation.mutate()
   }
 
   const isRatioType = (type) => type === 'revenue' || type === 'duration'
 
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">Новый эксперимент</h1>
-      </div>
+      <PageHeader title={t('experiments.create.title')} />
 
-      {/* ── Калькулятор выборки ── */}
-      <div className="card">
-        <h2 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>
-          📊 Калькулятор размера выборки
-        </h2>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Текущая конверсия</label>
-            <input type="number" step="0.001" placeholder="0.032"
-              value={calc.baseline_rate}
-              onChange={e => setCalc({ ...calc, baseline_rate: e.target.value })} />
-            <p className="form-hint">Пример: 0.032 = 3.2%</p>
-          </div>
-          <div className="form-group">
-            <label>Минимальный эффект (MDE)</label>
-            <input type="number" step="0.001" placeholder="0.005"
-              value={calc.mde}
-              onChange={e => setCalc({ ...calc, mde: e.target.value })} />
-            <p className="form-hint">Пример: 0.005 = +0.5%</p>
-          </div>
-        </div>
-        <div className="form-group">
-          <label>Дневной трафик (опционально)</label>
-          <input type="number" placeholder="500"
-            value={calc.daily_traffic}
-            onChange={e => setCalc({ ...calc, daily_traffic: e.target.value })} />
-        </div>
-        <button className="btn btn-secondary" onClick={calcSampleSize}>
-          Рассчитать
-        </button>
-
-        {calcError && (
-          <div className="alert alert-warning mt-1" style={{ marginTop: '0.75rem' }}>
-             {calcError}
-          </div>
-        )}
-
-        {sampleSize && (
-          <div className="alert alert-info mt-2">
-            <strong>На вариант:</strong> {sampleSize.sample_size_per_variant.toLocaleString()} пользователей
-            &nbsp;·&nbsp;
-            <strong>Всего:</strong> {sampleSize.total_sample_size.toLocaleString()}
-            {sampleSize.days_needed && (
-              <span>&nbsp;·&nbsp;<strong>Дней:</strong> {sampleSize.days_needed}</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── Форма эксперимента ── */}
-      <form onSubmit={handleSubmit}>
-        {error && <div className="alert alert-danger">{error}</div>}
-
-        {/* Основное */}
-        <div className="card">
-          <h2 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Основное</h2>
-          <div className="form-group">
-            <label>Название *</label>
-            <input required placeholder="Тест цвета кнопки"
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label>Описание</label>
-            <textarea rows={2} placeholder="Что тестируем и зачем"
-              value={form.description}
-              onChange={e => setForm({ ...form, description: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label>Трафик (%)</label>
-            <input type="number" min={1} max={100}
-              value={form.traffic_percentage}
-              onChange={e => setForm({ ...form, traffic_percentage: e.target.value })} />
-            <p className="form-hint">Какой % всех пользователей участвует в эксперименте</p>
-          </div>
-        </div>
-
-        {/* Варианты */}
-        <div className="card">
-          <h2 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Варианты</h2>
-          {form.variants.map((v, i) => (
-            <div key={i} className="form-row" style={{ marginBottom: '0.75rem' }}>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label>Название</label>
-                <input value={v.name}
-                  onChange={e => {
-                    const variants = [...form.variants]
-                    variants[i] = { ...variants[i], name: e.target.value }
-                    setForm({ ...form, variants })
-                  }} />
-              </div>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label>Трафик (%)</label>
-                <input type="number" min={1} max={100} value={v.traffic_split}
-                  onChange={e => {
-                    const variants = [...form.variants]
-                    variants[i] = { ...variants[i], traffic_split: e.target.value }
-                    setForm({ ...form, variants })
-                  }} />
-              </div>
+      {/* Sample size calculator */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">
+            {t('experiments.create.sampleSizeCalc')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>{t('experiments.create.baselineRate')}</Label>
+              <Input
+                type="number"
+                step="0.001"
+                placeholder="0.032"
+                value={calc.baseline_rate}
+                onChange={(e) =>
+                  setCalc({ ...calc, baseline_rate: e.target.value })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('experiments.create.baselineHint')}
+              </p>
             </div>
-          ))}
-          <p className="form-hint">Сумма трафика вариантов должна быть 100%</p>
-        </div>
-
-        {/* Метрики */}
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>Метрики</h2>
-            <button type="button" className="btn btn-sm btn-secondary" onClick={addMetric}>
-              + Добавить метрику
-            </button>
+            <div className="space-y-2">
+              <Label>{t('experiments.create.mde')}</Label>
+              <Input
+                type="number"
+                step="0.001"
+                placeholder="0.005"
+                value={calc.mde}
+                onChange={(e) => setCalc({ ...calc, mde: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('experiments.create.mdeHint')}
+              </p>
+            </div>
           </div>
+          <div className="space-y-2">
+            <Label>{t('experiments.create.dailyTraffic')}</Label>
+            <Input
+              type="number"
+              placeholder="500"
+              value={calc.daily_traffic}
+              onChange={(e) =>
+                setCalc({ ...calc, daily_traffic: e.target.value })
+              }
+            />
+          </div>
+          <Button variant="secondary" onClick={calcSampleSize}>
+            {t('experiments.create.calculate')}
+          </Button>
 
-          {form.metrics.map((m, i) => (
-            <div key={i} style={{
-              borderTop: i > 0 ? '1px solid #f3f4f6' : 'none',
-              paddingTop: i > 0 ? '1rem' : 0,
-              marginBottom: '1rem',
-            }}>
+          {calcError && (
+            <Alert variant="warning">
+              <AlertDescription>{calcError}</AlertDescription>
+            </Alert>
+          )}
 
-              {/* Название + тип */}
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Название метрики *</label>
-                  <input required placeholder="Клик по кнопке"
-                    value={m.name}
-                    onChange={e => updateMetric(i, 'name', e.target.value)} />
+          {sampleSize && (
+            <Alert variant="info">
+              <AlertDescription>
+                <strong>{t('experiments.create.perVariant')}:</strong>{' '}
+                {sampleSize.sample_size_per_variant.toLocaleString()}{' '}
+                &nbsp;·&nbsp;
+                <strong>{t('experiments.create.total')}:</strong>{' '}
+                {sampleSize.total_sample_size.toLocaleString()}
+                {sampleSize.days_needed && (
+                  <span>
+                    &nbsp;·&nbsp;
+                    <strong>{t('experiments.create.days')}:</strong>{' '}
+                    {sampleSize.days_needed}
+                  </span>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Basics */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {t('experiments.create.basics')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">{t('experiments.create.name')} *</Label>
+              <Input
+                id="name"
+                required
+                placeholder={t('experiments.create.namePlaceholder')}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">
+                {t('experiments.create.description')}
+              </Label>
+              <textarea
+                id="description"
+                rows={2}
+                placeholder={t('experiments.create.descriptionPlaceholder')}
+                className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="traffic">
+                {t('experiments.create.trafficPercentage')}
+              </Label>
+              <Input
+                id="traffic"
+                type="number"
+                min={1}
+                max={100}
+                value={form.traffic_percentage}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    traffic_percentage: e.target.value,
+                  })
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Variants */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {t('experiments.create.variants')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {form.variants.map((v, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+              >
+                <div className="space-y-2">
+                  <Label>{t('experiments.create.variantName')}</Label>
+                  <Input
+                    value={v.name}
+                    onChange={(e) => {
+                      const variants = [...form.variants]
+                      variants[i] = { ...variants[i], name: e.target.value }
+                      setForm({ ...form, variants })
+                    }}
+                  />
                 </div>
-                <div className="form-group">
-                  <label>Тип</label>
-                  <select value={m.metric_type}
-                    onChange={e => updateMetric(i, 'metric_type', e.target.value)}>
-                    <option value="conversion">Конверсия</option>
-                    <option value="revenue">Выручка</option>
-                    <option value="duration">Длительность</option>
-                  </select>
+                <div className="space-y-2">
+                  <Label>{t('experiments.create.weight')}</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={v.traffic_split}
+                    onChange={(e) => {
+                      const variants = [...form.variants]
+                      variants[i] = {
+                        ...variants[i],
+                        traffic_split: e.target.value,
+                      }
+                      setForm({ ...form, variants })
+                    }}
+                  />
                 </div>
               </div>
+            ))}
+            <p className="text-xs text-muted-foreground">
+              {t('experiments.create.weightSumHint')}
+            </p>
+          </CardContent>
+        </Card>
 
-              {/* Event name + denominator */}
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Event name (числитель) *</label>
-                  <input required placeholder="button_click"
-                    value={m.event_name}
-                    onChange={e => updateMetric(i, 'event_name', e.target.value)} />
-                  <p className="form-hint">
-                    {isRatioType(m.metric_type)
-                      ? 'Числитель: какое событие суммируем'
-                      : 'Какое событие отслеживаем'}
-                  </p>
-                </div>
-
-                {/*Denominator field (только для revenue/duration)  */}
-                {isRatioType(m.metric_type) && (
-                  <div className="form-group">
-                    <label>
-                      Знаменатель event{' '}
-                      <span className="text-muted" style={{ fontWeight: 400 }}>(для ratio)</span>
-                    </label>
-                    <input
-                      placeholder="session_start"
-                      value={m.denominator_event_name || ''}
-                      onChange={e => updateMetric(i, 'denominator_event_name', e.target.value || null)}
+        {/* Metrics */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">
+              {t('experiments.create.metrics')}
+            </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addMetric}
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              {t('experiments.create.addMetric')}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {form.metrics.map((m, i) => (
+              <div
+                key={i}
+                className={
+                  i > 0
+                    ? 'space-y-4 border-t pt-4'
+                    : 'space-y-4'
+                }
+              >
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>{t('experiments.create.metricName')} *</Label>
+                    <Input
+                      required
+                      placeholder={t('experiments.create.metricNamePlaceholder')}
+                      value={m.name}
+                      onChange={(e) => updateMetric(i, 'name', e.target.value)}
                     />
-                    <p className="form-hint">
-                      {m.denominator_event_name
-                        ? `→ ratio метрика: sum(${m.event_name || '...'}) / sum(${m.denominator_event_name})`
-                        : 'Оставьте пустым для обычной revenue/duration метрики'}
-                    </p>
                   </div>
-                )}
-              </div>
-
-              {/* Ratio badge */}
-              {isRatioType(m.metric_type) && m.denominator_event_name && (
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  padding: '0.25rem 0.6rem',
-                  background: '#f0fdf4',
-                  border: '1px solid #86efac',
-                  borderRadius: '6px',
-                  fontSize: '0.75rem',
-                  color: '#166534',
-                  marginBottom: '0.75rem',
-                }}>
-                  <span>Δ</span>
-                  <strong>Ratio метрика</strong> — будет применён Delta method (корректный тест для ratio)
+                  <div className="space-y-2">
+                    <Label>{t('experiments.create.metricType')}</Label>
+                    <select
+                      value={m.metric_type}
+                      onChange={(e) =>
+                        updateMetric(i, 'metric_type', e.target.value)
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="conversion">
+                        {t('experiments.create.conversion')}
+                      </option>
+                      <option value="revenue">
+                        {t('experiments.create.revenue')}
+                      </option>
+                      <option value="duration">
+                        {t('experiments.create.duration')}
+                      </option>
+                    </select>
+                  </div>
                 </div>
-              )}
 
-              {/* Флаги + удаление */}
-              <div className="form-group" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-                <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={m.is_primary}
-                    onChange={e => updateMetric(i, 'is_primary', e.target.checked)} />
-                  Primary
-                </label>
-                <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={m.is_guardrail}
-                    onChange={e => updateMetric(i, 'is_guardrail', e.target.checked)} />
-                  Guardrail
-                </label>
-                {form.metrics.length > 1 && (
-                  <button type="button" className="btn btn-sm btn-danger"
-                    onClick={() => removeMetric(i)}>
-                    Удалить
-                  </button>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>{t('experiments.create.eventName')} *</Label>
+                    <Input
+                      required
+                      placeholder="button_click"
+                      value={m.event_name}
+                      onChange={(e) =>
+                        updateMetric(i, 'event_name', e.target.value)
+                      }
+                    />
+                  </div>
+                  {isRatioType(m.metric_type) && (
+                    <div className="space-y-2">
+                      <Label>{t('experiments.create.denominator')}</Label>
+                      <Input
+                        placeholder="session_start"
+                        value={m.denominator_event_name || ''}
+                        onChange={(e) =>
+                          updateMetric(
+                            i,
+                            'denominator_event_name',
+                            e.target.value || null,
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {isRatioType(m.metric_type) && m.denominator_event_name && (
+                  <Alert variant="success">
+                    <AlertDescription>
+                      <strong>{t('experiments.create.ratioBadge')}</strong> —{' '}
+                      {t('experiments.create.ratioHint')}
+                    </AlertDescription>
+                  </Alert>
                 )}
-              </div>
-            </div>
-          ))}
-        </div>
 
-        <button type="submit" className="btn btn-primary" disabled={loading}>
-          {loading ? 'Создание...' : 'Создать эксперимент'}
-        </button>
+                <div className="flex items-center gap-6">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={m.is_primary}
+                      onCheckedChange={(checked) =>
+                        updateMetric(i, 'is_primary', checked)
+                      }
+                    />
+                    {t('experiments.create.primary')}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={m.is_guardrail}
+                      onCheckedChange={(checked) =>
+                        updateMetric(i, 'is_guardrail', checked)
+                      }
+                    />
+                    {t('experiments.create.guardrail')}
+                  </label>
+                  {form.metrics.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => removeMetric(i)}
+                    >
+                      {t('common.delete')}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Button type="submit" disabled={createMutation.isLoading}>
+          {createMutation.isLoading
+            ? t('common.loading')
+            : t('experiments.create.submit')}
+        </Button>
       </form>
     </>
   )

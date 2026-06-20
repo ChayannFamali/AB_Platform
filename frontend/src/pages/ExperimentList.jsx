@@ -1,207 +1,312 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { deleteExperiment, getExperiments, updateStatus } from '../api/client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { Beaker, Plus } from 'lucide-react'
 
-const STATUS_LABELS = {
-  draft: 'Draft', running: 'Running',
-  paused: 'Paused', completed: 'Completed',
+import {
+  deleteExperiment,
+  getExperiments,
+  updateStatus,
+} from '../api/client'
+import { Button } from '../components/ui/button'
+import { Badge } from '../components/ui/badge'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '../components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../components/ui/table'
+import { Alert, AlertDescription } from '../components/ui/alert'
+import EmptyState from '../components/EmptyState'
+import LoadingState from '../components/LoadingState'
+import { PageHeader } from '../components/PageContainer'
+import { toast } from '../hooks/use-toast'
+
+const STATUS_VARIANT = {
+  draft: 'secondary',
+  running: 'success',
+  paused: 'warning',
+  completed: 'info',
 }
 
 const LIMIT = 20
 
 export default function ExperimentList() {
-  const [experiments,  setExperiments]  = useState([])
-  const [total,        setTotal]        = useState(0)
-  const [offset,       setOffset]       = useState(0)
+  const { t, i18n } = useTranslation()
+  const queryClient = useQueryClient()
+  const [offset, setOffset] = useState(0)
   const [statusFilter, setStatusFilter] = useState('')
-  const [loading,      setLoading]      = useState(true)
 
-  const load = async (newOffset = 0, newStatus = statusFilter) => {
-    setLoading(true)
-    try {
-      const { data } = await getExperiments({
-        limit:  LIMIT,
-        offset: newOffset,
-        ...(newStatus ? { status: newStatus } : {}),
-      })
-      setExperiments(data.items)
-      setTotal(data.total)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const filters = { limit: LIMIT, offset }
+  if (statusFilter) filters.status = statusFilter
 
-  useEffect(() => { load(0, '') }, [])
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['experiments', filters],
+    queryFn: () => getExperiments(filters).then((r) => r.data),
+    keepPreviousData: true,
+  })
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ['experiments'] })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }) => updateStatus(id, status),
+    onSuccess: () => {
+      invalidate()
+      toast({ description: t('experiments.list.statusUpdated', { defaultValue: 'Status updated' }) })
+    },
+    onError: (err) =>
+      toast({
+        variant: 'destructive',
+        description: err.response?.data?.detail || t('errors.serverError'),
+      }),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteExperiment(id),
+    onSuccess: () => {
+      invalidate()
+      toast({ description: t('experiments.list.deleted', { defaultValue: 'Deleted' }) })
+    },
+    onError: (err) =>
+      toast({
+        variant: 'destructive',
+        description: err.response?.data?.detail || t('errors.serverError'),
+      }),
+  })
+
+  const items = data?.items ?? []
+  const total = data?.total ?? 0
 
   const handleStatusFilter = (s) => {
     setStatusFilter(s)
     setOffset(0)
-    load(0, s)
   }
 
-  const handlePrev = () => {
-    const o = Math.max(0, offset - LIMIT)
-    setOffset(o)
-    load(o)
+  const handlePrev = () => setOffset(Math.max(0, offset - LIMIT))
+  const handleNext = () => setOffset(offset + LIMIT)
+
+  const handleDelete = (id) => {
+    if (!window.confirm(t('experiments.list.deleteConfirm'))) return
+    deleteMutation.mutate(id)
   }
 
-  const handleNext = () => {
-    const o = offset + LIMIT
-    setOffset(o)
-    load(o)
-  }
-
-  const handleStatus = async (id, status) => {
-    await updateStatus(id, status)
-    load(offset)
-  }
-
-  const handleDelete = async (id) => {
-    if (!confirm('Удалить эксперимент?')) return
-    await deleteExperiment(id)
-    // Если удалили последний на странице — вернуться на предыдущую
-    const newOffset = experiments.length === 1 && offset > 0
-      ? offset - LIMIT : offset
-    setOffset(newOffset)
-    load(newOffset)
-  }
-
-  // Вычисляем навигацию
-  const from       = total === 0 ? 0 : offset + 1
-  const to         = Math.min(offset + LIMIT, total)
+  const from = total === 0 ? 0 : offset + 1
+  const to = Math.min(offset + LIMIT, total)
   const totalPages = Math.ceil(total / LIMIT) || 1
-  const currentPage= Math.floor(offset / LIMIT) + 1
+  const currentPage = Math.floor(offset / LIMIT) + 1
 
   return (
     <>
-      {/* ── Header ── */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Эксперименты</h1>
-          {!loading && (
-            <p className="text-muted" style={{ marginTop: '0.25rem' }}>
-              Всего: {total}
-            </p>
-          )}
-        </div>
-        <Link to="/experiments/new" className="btn btn-primary">+ Создать</Link>
-      </div>
+      <PageHeader
+        title={t('experiments.title')}
+        description={
+          !isLoading
+            ? t('experiments.list.total', { count: total })
+            : undefined
+        }
+        actions={
+          <Button asChild>
+            <Link to="/experiments/new">
+              <Plus className="mr-1 h-4 w-4" />
+              {t('experiments.new')}
+            </Link>
+          </Button>
+        }
+      />
 
-      {/* ── Фильтр по статусу ── */}
-      <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <div className="mb-4 flex flex-wrap gap-2">
         {['', 'draft', 'running', 'paused', 'completed'].map((s) => (
-          <button
-            key={s}
+          <Button
+            key={s || 'all'}
+            variant={statusFilter === s ? 'default' : 'outline'}
+            size="sm"
             onClick={() => handleStatusFilter(s)}
-            className="btn btn-sm"
-            style={{
-              background: statusFilter === s ? '#4f46e5' : '#e5e7eb',
-              color:      statusFilter === s ? '#fff'    : '#374151',
-            }}
           >
-            {s === '' ? 'Все' : STATUS_LABELS[s]}
-          </button>
+            {s === ''
+              ? t('common.all')
+              : t(`experiments.list.${s}`)}
+          </Button>
         ))}
       </div>
 
-      {/* ── Таблица ── */}
-      {loading ? (
-        <div className="loading">Загрузка...</div>
-      ) : experiments.length === 0 ? (
-        <div className="card text-center">
-          <p className="text-muted">
-            {statusFilter
-              ? `Нет экспериментов со статусом «${STATUS_LABELS[statusFilter]}»`
-              : 'Нет экспериментов. Создайте первый!'}
-          </p>
-        </div>
+      {isError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            {error?.response?.data?.detail || t('errors.serverError')}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isLoading ? (
+        <LoadingState variant="skeleton" count={5} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={Beaker}
+          title={t('common.noData')}
+          description={
+            statusFilter
+              ? t('experiments.list.emptyFiltered', {
+                  status: t(`experiments.list.${statusFilter}`),
+                })
+              : t('experiments.list.empty')
+          }
+          action={
+            <Button asChild>
+              <Link to="/experiments/new">
+                <Plus className="mr-1 h-4 w-4" />
+                {t('experiments.new')}
+              </Link>
+            </Button>
+          }
+        />
       ) : (
-        <div className="card">
-          <table>
-            <thead>
-              <tr>
-                <th>Название</th>
-                <th>Статус</th>
-                <th>Трафик</th>
-                <th>Создан</th>
-                <th>Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {experiments.map((exp) => (
-                <tr key={exp.id}>
-                  <td>
-                    <Link
-                      to={`/experiments/${exp.id}`}
-                      style={{ color: '#4f46e5', fontWeight: 500 }}
-                    >
-                      {exp.name}
-                    </Link>
-                  </td>
-                  <td>
-                    <span className={`badge badge-${exp.status}`}>
-                      {STATUS_LABELS[exp.status]}
-                    </span>
-                  </td>
-                  <td>{exp.traffic_percentage}%</td>
-                  <td className="text-muted">
-                    {new Date(exp.created_at).toLocaleDateString('ru-RU')}
-                  </td>
-                  <td>
-                    <div className="flex gap-1">
-                      <Link to={`/experiments/${exp.id}`} className="btn btn-sm btn-secondary">
-                        Открыть
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              {t('experiments.title')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('experiments.create.name')}</TableHead>
+                  <TableHead>{t('experiments.create.status')}</TableHead>
+                  <TableHead>{t('experiments.list.traffic')}</TableHead>
+                  <TableHead>{t('experiments.list.created')}</TableHead>
+                  <TableHead className="text-right">
+                    {t('common.actions')}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((exp) => (
+                  <TableRow key={exp.id}>
+                    <TableCell>
+                      <Link
+                        to={`/experiments/${exp.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {exp.name}
                       </Link>
-                      {exp.status === 'draft' && (
-                        <button className="btn btn-sm btn-success"
-                          onClick={() => handleStatus(exp.id, 'running')}>
-                          ▶ Запустить
-                        </button>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[exp.status] || 'secondary'}>
+                        {t(`experiments.list.${exp.status}`)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{exp.traffic_percentage}%</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(exp.created_at).toLocaleDateString(
+                        i18n.language === 'en' ? 'en-US' : 'ru-RU'
                       )}
-                      {exp.status === 'running' && (
-                        <button className="btn btn-sm btn-secondary"
-                          onClick={() => handleStatus(exp.id, 'paused')}>
-                          ⏸ Пауза
-                        </button>
-                      )}
-                      {exp.status === 'draft' && (
-                        <button className="btn btn-sm btn-danger"
-                          onClick={() => handleDelete(exp.id)}>
-                          🗑
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button asChild variant="outline" size="sm">
+                          <Link to={`/experiments/${exp.id}`}>
+                            {t('experiments.list.open')}
+                          </Link>
+                        </Button>
+                        {exp.status === 'draft' && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() =>
+                              statusMutation.mutate({
+                                id: exp.id,
+                                status: 'running',
+                              })
+                            }
+                          >
+                            {t('experiments.list.start')}
+                          </Button>
+                        )}
+                        {exp.status === 'running' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              statusMutation.mutate({
+                                id: exp.id,
+                                status: 'paused',
+                              })
+                            }
+                          >
+                            {t('experiments.list.pause')}
+                          </Button>
+                        )}
+                        {exp.status === 'paused' && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() =>
+                              statusMutation.mutate({
+                                id: exp.id,
+                                status: 'running',
+                              })
+                            }
+                          >
+                            {t('experiments.list.resume')}
+                          </Button>
+                        )}
+                        {(exp.status === 'draft' ||
+                          exp.status === 'completed') && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDelete(exp.id)}
+                          >
+                            {t('experiments.list.delete')}
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
 
-          {/* ── Пагинация ── */}
-          {total > LIMIT && (
-            <div className="pagination">
-              <button
-                className="btn btn-sm btn-secondary"
-                onClick={handlePrev}
-                disabled={offset === 0}
-              >
-                ← Назад
-              </button>
-
-              <span className="pagination-info">
-                {from}–{to} из {total} · страница {currentPage} из {totalPages}
-              </span>
-
-              <button
-                className="btn btn-sm btn-secondary"
-                onClick={handleNext}
-                disabled={offset + LIMIT >= total}
-              >
-                Вперёд →
-              </button>
-            </div>
-          )}
-        </div>
+            {total > LIMIT && (
+              <div className="mt-4 flex items-center justify-between border-t pt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrev}
+                  disabled={offset === 0}
+                >
+                  {t('common.back')}
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  {t('experiments.list.range', { from, to, total })}
+                  {' · '}
+                  {t('experiments.list.page', {
+                    current: currentPage,
+                    total: totalPages,
+                  })}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNext}
+                  disabled={offset + LIMIT >= total}
+                >
+                  {t('common.next')}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </>
   )
