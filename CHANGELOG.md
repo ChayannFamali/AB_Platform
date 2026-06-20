@@ -3,6 +3,24 @@
 ## [Unreleased]
 
 ### Added
+- M-005: Core pages — `DashboardPage` at `/` (summary cards: running
+  experiments / completed / total + recent activity feed from audit log +
+  quick action links; "active flags" card is a stub pending M-009);
+  `ExperimentDetailPage` at `/experiments/:id` with four URL-synced tabs
+  (`?tab=overview|results|decisions|settings`); sub-components
+  `ExperimentStatusCard`, `ExperimentResultsTab` (extracted from the
+  former `ExperimentResults.jsx`), `DecisionLogTab` (placeholder for
+  M-012), `ExperimentSettingsTab` (read-only metadata), and
+  `ExportButton`; `SettingsPage` at `/settings` with theme toggle,
+  language switcher, admin shortcuts, and platform version block; new
+  backend endpoint `GET /api/v1/experiments/{id}/results/export?format=csv`
+  returning RFC 4180 CSV (`text/csv` + `Content-Disposition: attachment`),
+  backed by `analysis_service.export_results_csv()`; new API client
+  functions `exportResults` (Blob for download) and fixed
+  `getDailyResults` URL (was missing `/api/v1` prefix — caused 404 on
+  the daily trend chart); i18n keys for all new pages and tabs in
+  `ru.json` + `en.json` (dashboard, settings, export, decisions,
+  experiments.detail, experiments.tabs).
 - M-004: Audit log + Users & Audit pages — `AuditLog` model (append-only,
   `id` / `user_id` / `action` / `resource_type` / `resource_id` /
   `details` JSONB / `ip_address` / `user_agent` / `created_at`);
@@ -92,6 +110,11 @@
 
 ### Removed
 - `App.css` (M-001) — no longer used (all styles via Tailwind + shadcn).
+- `frontend/src/pages/ExperimentResults.jsx` (M-005) — replaced by
+  `ExperimentDetailPage` (4 tabs) + `ExperimentResultsTab` (extracted
+  results-table logic). The `/experiments/:id` route now renders the
+  new detail page. Old `ExperimentResults.test.jsx` was deleted and
+  replaced by `ExperimentDetailPage.test.jsx`.
 
 ### Notes
 - M-001 bundle: 28 KB CSS / 907 KB JS (277 KB gzipped).
@@ -108,6 +131,18 @@
   (`npm run test:run`) — added 4 new smoke tests (2 per page).
 - M-004 migration verified: `alembic upgrade head` and `downgrade -1`
   both run cleanly.
+- M-005 backend tests: 86 passed, 0 failed (`pytest tests/ -v`) —
+  added 5 new tests for `GET /api/v1/experiments/{id}/results/export`
+  (404 when no results / 400 on bad format / 401 unauthenticated /
+  well-formed CSV with 1 row / multiple variant rows).
+- M-005 frontend tests: 39 passed, 0 failed across 14 test files
+  (`npm run test:run`) — added 7 new tests (2 DashboardPage,
+  3 SettingsPage, 2 ExperimentDetailPage) and deleted the old
+  `ExperimentResults.test.jsx` (replaced by `ExperimentDetailPage.test.jsx`).
+- M-005 frontend lint: clean (`npm run lint`).
+- M-005 frontend bundle: `npm run build` succeeds (no new size budget
+  concerns — DashboardPage + ExperimentDetailPage + SettingsPage +
+  5 sub-components add ~12 KB gzipped on top of the M-001 baseline).
 - M-003 migration verified: `alembic upgrade head` and `downgrade -1` both run
   cleanly on the test database.
 - The legacy `users.is_admin` column is retained as a deprecated read-only field

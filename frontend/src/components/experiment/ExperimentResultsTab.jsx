@@ -1,35 +1,31 @@
-import { useParams, Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
-  BarChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  Legend,
-  ReferenceLine,
 } from 'recharts'
 
 import {
   analyzeExperiment,
   getDailyResults,
-  getExperiment,
   getResults,
-  updateStatus,
-} from '../api/client'
-import { Button } from '../components/ui/button'
-import { Badge } from '../components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
-import { Alert, AlertDescription } from '../components/ui/alert'
-import LoadingState from '../components/LoadingState'
-import EmptyState from '../components/EmptyState'
-import { PageHeader } from '../components/PageContainer'
-import { toast } from '../hooks/use-toast'
+} from '../../api/client'
+import { Alert, AlertDescription } from '../ui/alert'
+import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import EmptyState from '../EmptyState'
+import LoadingState from '../LoadingState'
+import { toast } from '../../hooks/use-toast'
 
 const fmt = (v, type) => {
   if (v == null) return '—'
@@ -53,28 +49,24 @@ const formatSnapshotDate = (dateStr) => {
   return `${parts[2]}.${parts[1]}`
 }
 
-const LINE_COLORS = ['#4f46e5', '#059669', '#dc2626', '#d97706', '#7c3aed', '#0891b2']
+const LINE_COLORS = [
+  '#4f46e5', '#059669', '#dc2626', '#d97706', '#7c3aed', '#0891b2',
+]
 
 const TEST_META = {
-  mann_whitney: { label: 'Mann-Whitney', variant: 'warning' },
-  welch_t_test: { label: 'Welch t-test', variant: 'info' },
-  z_test: { label: 'Z-test', variant: 'info' },
-  delta_method: { label: 'Δ Delta method', variant: 'success' },
+  mann_whitney:  { label: 'Mann-Whitney', variant: 'warning' },
+  welch_t_test:  { label: 'Welch t-test',  variant: 'info' },
+  z_test:        { label: 'Z-test',        variant: 'info' },
+  delta_method:  { label: 'Δ Delta method', variant: 'success' },
 }
 
 function TestBadge({ testUsed, isNormal }) {
   if (!testUsed) return <span className="text-muted-foreground">—</span>
-
-  const meta = TEST_META[testUsed] ?? {
-    label: testUsed,
-    variant: 'secondary',
-  }
-
+  const meta = TEST_META[testUsed] ?? { label: testUsed, variant: 'secondary' }
   const showNormality =
     (testUsed === 'welch_t_test' || testUsed === 'mann_whitney') &&
     isNormal !== null &&
     isNormal !== undefined
-
   return (
     <div className="flex flex-col items-start gap-1">
       <Badge variant={meta.variant}>{meta.label}</Badge>
@@ -106,13 +98,10 @@ function AchievedMdeBlock({ metric }) {
       v.achieved_mde != null,
   )
   if (targets.length === 0) return null
-
   return (
     <Alert variant="info" className="mb-6">
       <AlertDescription>
-        <div className="mb-2 font-semibold">
-          📏 Чувствительность теста
-        </div>
+        <div className="mb-2 font-semibold">📏 Чувствительность теста</div>
         <div className="mb-2 text-sm">
           Результат незначим. При текущей выборке платформа обнаружила бы следующий минимальный эффект:
         </div>
@@ -144,12 +133,14 @@ function DecompositionBlock({ variants }) {
     (v) => v.variant_name !== 'control' && v.numerator_relative_lift != null,
   )
   if (withDecomp.length === 0) return null
-
   const liftColor = (val) =>
-    val == null ? 'text-gray-400' : val >= 0 ? 'text-emerald-600' : 'text-red-600'
+    val == null
+      ? 'text-gray-400'
+      : val >= 0
+        ? 'text-emerald-600'
+        : 'text-red-600'
   const liftFmt = (val) =>
     val == null ? '—' : `${val >= 0 ? '+' : ''}${val.toFixed(1)}%`
-
   return (
     <div className="mb-6">
       <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
@@ -166,19 +157,13 @@ function DecompositionBlock({ variants }) {
           <div className="mb-3 text-sm font-semibold">{v.variant_name}</div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <div className="mb-1 text-xs text-muted-foreground">
-                Ratio (итог)
-              </div>
-              <div
-                className={`text-base font-bold ${liftColor(v.relative_lift)}`}
-              >
+              <div className="mb-1 text-xs text-muted-foreground">Ratio (итог)</div>
+              <div className={`text-base font-bold ${liftColor(v.relative_lift)}`}>
                 {liftFmt(v.relative_lift)}
               </div>
             </div>
             <div>
-              <div className="mb-1 text-xs text-muted-foreground">
-                └ Числитель
-              </div>
+              <div className="mb-1 text-xs text-muted-foreground">└ Числитель</div>
               <div
                 className={`text-base font-semibold ${liftColor(v.numerator_relative_lift)}`}
               >
@@ -191,9 +176,7 @@ function DecompositionBlock({ variants }) {
               )}
             </div>
             <div>
-              <div className="mb-1 text-xs text-muted-foreground">
-                └ Знаменатель
-              </div>
+              <div className="mb-1 text-xs text-muted-foreground">└ Знаменатель</div>
               <div
                 className={`text-base font-semibold ${liftColor(v.denominator_relative_lift)}`}
               >
@@ -217,7 +200,6 @@ function DynamicsChart({ metricId, snapshots, treatmentVariants }) {
     (s) => s.metric_id === metricId && s.variant_name !== 'control',
   )
   if (metricSnapshots.length === 0) return null
-
   const dateMap = {}
   metricSnapshots.forEach((s) => {
     if (!dateMap[s.snapshot_date]) {
@@ -230,13 +212,10 @@ function DynamicsChart({ metricId, snapshots, treatmentVariants }) {
       dateMap[s.snapshot_date][s.variant_name] = s.p_value
     }
   })
-
   const chartData = Object.values(dateMap).sort((a, b) =>
     a.date.localeCompare(b.date),
   )
-
   if (chartData.length < 2) return null
-
   return (
     <div className="mt-6">
       <h3 className="mb-1 text-sm font-semibold text-muted-foreground">
@@ -288,21 +267,15 @@ function DynamicsChart({ metricId, snapshots, treatmentVariants }) {
   )
 }
 
-export default function ExperimentResults() {
-  const { id } = useParams()
+export default function ExperimentResultsTab({ experimentId, experimentStatus }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const experimentQuery = useQuery({
-    queryKey: ['experiment', id],
-    queryFn: () => getExperiment(id).then((r) => r.data),
-  })
-
   const resultsQuery = useQuery({
-    queryKey: ['experiment-results', id],
+    queryKey: ['experiment-results', experimentId],
     queryFn: async () => {
       try {
-        const { data } = await getResults(id)
+        const { data } = await getResults(experimentId)
         return data
       } catch {
         return null
@@ -311,10 +284,10 @@ export default function ExperimentResults() {
   })
 
   const dailyQuery = useQuery({
-    queryKey: ['experiment-daily', id],
+    queryKey: ['experiment-daily', experimentId],
     queryFn: async () => {
       try {
-        const { data } = await getDailyResults(id)
+        const { data } = await getDailyResults(experimentId)
         return data
       } catch {
         return null
@@ -323,116 +296,47 @@ export default function ExperimentResults() {
   })
 
   const analyzeMutation = useMutation({
-    mutationFn: () => analyzeExperiment(id),
+    mutationFn: () => analyzeExperiment(experimentId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['experiment-results', id] })
+      queryClient.invalidateQueries({
+        queryKey: ['experiment-results', experimentId],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ['experiment-daily', experimentId],
+      })
       toast({ description: t('experiments.results.analyzed') })
     },
     onError: (err) =>
       toast({
         variant: 'destructive',
-        description:
-          err.response?.data?.detail || t('errors.serverError'),
+        description: err.response?.data?.detail || t('errors.serverError'),
       }),
   })
 
-  const statusMutation = useMutation({
-    mutationFn: (status) => updateStatus(id, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['experiment', id] })
-    },
-  })
-
-  if (experimentQuery.isLoading) {
-    return <LoadingState variant="spinner" label={t('experiments.results.loading')} />
-  }
-
-  if (experimentQuery.isError) {
-    return (
-      <ErrorState
-        title={t('errors.notFound')}
-        description={t('experiments.results.notFound')}
-      />
-    )
-  }
-
-  const exp = experimentQuery.data
   const results = resultsQuery.data
   const dailyResults = dailyQuery.data
 
   return (
     <>
-      <PageHeader
-        title={exp.name}
-        description={exp.description}
-        actions={
-          <div className="flex items-center gap-2">
-            <Badge
-              variant={
-                exp.status === 'running'
-                  ? 'success'
-                  : exp.status === 'paused'
-                    ? 'warning'
-                    : 'secondary'
-              }
-            >
-              {t(`experiments.list.${exp.status}`)}
-            </Badge>
-            {exp.status === 'draft' && (
-              <Button
-                onClick={() => statusMutation.mutate('running')}
-                disabled={statusMutation.isLoading}
-              >
-                {t('experiments.list.start')}
-              </Button>
-            )}
-            {exp.status === 'running' && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => statusMutation.mutate('paused')}
-                  disabled={statusMutation.isLoading}
-                >
-                  {t('experiments.list.pause')}
-                </Button>
-                <Button
-                  onClick={() => analyzeMutation.mutate()}
-                  disabled={analyzeMutation.isLoading}
-                >
-                  {analyzeMutation.isLoading
-                    ? t('common.loading')
-                    : t('experiments.results.analyze')}
-                </Button>
-              </>
-            )}
-          </div>
-        }
-      />
+      {experimentStatus === 'running' && (
+        <div className="mb-4 flex items-center justify-end">
+          <Button
+            onClick={() => analyzeMutation.mutate()}
+            disabled={analyzeMutation.isLoading}
+          >
+            {analyzeMutation.isLoading
+              ? t('common.loading')
+              : t('experiments.results.analyze')}
+          </Button>
+        </div>
+      )}
 
-      <Link
-        to="/"
-        className="mb-4 inline-block text-sm text-muted-foreground hover:text-foreground"
-      >
-        ← {t('experiments.title')}
-      </Link>
+      {(resultsQuery.isLoading || dailyQuery.isLoading) && (
+        <LoadingState variant="spinner" />
+      )}
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {[
-          { label: t('experiments.list.traffic'), value: `${exp.traffic_percentage}%` },
-          { label: t('experiments.create.variants'), value: exp.variants.length },
-          { label: t('experiments.create.metrics'), value: exp.metrics.length },
-        ].map(({ label, value }) => (
-          <Card key={label}>
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl font-bold">{value}</div>
-              <div className="text-sm text-muted-foreground">{label}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {!results && (
-        <Alert variant="info">
+      {!resultsQuery.isLoading && !results && (
+        <Alert variant="info" className="mb-4">
           <AlertDescription>
             {t('experiments.results.noResultsHint')}
           </AlertDescription>
@@ -443,7 +347,6 @@ export default function ExperimentResults() {
         const treatmentVariants = (metric.variants || [])
           .filter((v) => v.variant_name !== 'control')
           .map((v) => v.variant_name)
-
         return (
           <Card key={metric.metric_id} className="mb-6">
             <CardHeader>
@@ -456,13 +359,16 @@ export default function ExperimentResults() {
                   <Badge variant="warning">Guardrail</Badge>
                 )}
               </CardTitle>
-              <div className="text-sm text-muted-foreground">{metric.metric_type}</div>
+              <div className="text-sm text-muted-foreground">
+                {metric.metric_type}
+              </div>
             </CardHeader>
             <CardContent>
               {metric.srm_detected && (
                 <Alert variant="destructive" className="mb-4">
                   <AlertDescription>
-                    <strong>Sample Ratio Mismatch</strong> (p={pFmt(metric.srm_p_value)})
+                    <strong>Sample Ratio Mismatch</strong> (p=
+                    {pFmt(metric.srm_p_value)})
                     <br />
                     {t('experiments.results.srmWarning')}
                   </AlertDescription>
@@ -481,14 +387,22 @@ export default function ExperimentResults() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                      <th className="px-2 py-2">{t('experiments.create.variants')}</th>
+                      <th className="px-2 py-2">
+                        {t('experiments.create.variants')}
+                      </th>
                       <th className="px-2 py-2">N</th>
-                      <th className="px-2 py-2">{t('experiments.results.mean')}</th>
+                      <th className="px-2 py-2">
+                        {t('experiments.results.mean')}
+                      </th>
                       <th className="px-2 py-2">Lift %</th>
                       <th className="px-2 py-2">p-value</th>
-                      <th className="px-2 py-2">{t('experiments.results.test')}</th>
+                      <th className="px-2 py-2">
+                        {t('experiments.results.test')}
+                      </th>
                       <th className="px-2 py-2">95% CI</th>
-                      <th className="px-2 py-2">{t('experiments.results.winner')}</th>
+                      <th className="px-2 py-2">
+                        {t('experiments.results.winner')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -496,12 +410,20 @@ export default function ExperimentResults() {
                       <tr
                         key={v.variant_id}
                         className={
-                          v.is_winner ? 'border-b bg-emerald-50 dark:bg-emerald-950/20' : 'border-b'
+                          v.is_winner
+                            ? 'border-b bg-emerald-50 dark:bg-emerald-950/20'
+                            : 'border-b'
                         }
                       >
-                        <td className="px-2 py-2 font-medium">{v.variant_name}</td>
-                        <td className="px-2 py-2">{v.sample_size.toLocaleString()}</td>
-                        <td className="px-2 py-2">{fmt(v.mean, metric.metric_type)}</td>
+                        <td className="px-2 py-2 font-medium">
+                          {v.variant_name}
+                        </td>
+                        <td className="px-2 py-2">
+                          {v.sample_size.toLocaleString()}
+                        </td>
+                        <td className="px-2 py-2">
+                          {fmt(v.mean, metric.metric_type)}
+                        </td>
                         <td className="px-2 py-2">
                           {v.relative_lift != null ? (
                             <span
@@ -527,7 +449,10 @@ export default function ExperimentResults() {
                         </td>
                         <td className="px-2 py-2 text-xs text-muted-foreground">
                           {v.ci_low != null
-                            ? `[${fmt(v.ci_low, metric.metric_type)}, ${fmt(v.ci_high, metric.metric_type)}]`
+                            ? `[${fmt(v.ci_low, metric.metric_type)}, ${fmt(
+                                v.ci_high,
+                                metric.metric_type,
+                              )}]`
                             : '—'}
                         </td>
                         <td className="px-2 py-2">
@@ -556,7 +481,10 @@ export default function ExperimentResults() {
                     value:
                       v.mean != null
                         ? parseFloat(
-                            (v.mean * (metric.metric_type === 'conversion' ? 100 : 1)).toFixed(4),
+                            (
+                              v.mean *
+                              (metric.metric_type === 'conversion' ? 100 : 1)
+                            ).toFixed(4),
                           )
                         : 0,
                   }))}
@@ -566,7 +494,9 @@ export default function ExperimentResults() {
                   <YAxis />
                   <Tooltip
                     formatter={(v) =>
-                      metric.metric_type === 'conversion' ? `${v.toFixed(2)}%` : v
+                      metric.metric_type === 'conversion'
+                        ? `${v.toFixed(2)}%`
+                        : v
                     }
                   />
                   <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} />
@@ -591,7 +521,8 @@ export default function ExperimentResults() {
                     .map((v) => (
                       <Alert key={v.variant_id} variant="info" className="mb-2">
                         <AlertDescription>
-                          <strong>{v.variant_name}:</strong> {v.ai_interpretation}
+                          <strong>{v.variant_name}:</strong>{' '}
+                          {v.ai_interpretation}
                         </AlertDescription>
                       </Alert>
                     ))}

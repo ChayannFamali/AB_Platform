@@ -145,6 +145,22 @@
       "test": "Тест",
       "winner": "Победитель",
       "notFound": "Эксперимент не найден"
+    },
+    "detail": {
+      "summary": "Сводка",
+      "startedAt": "Запущен",
+      "endedAt": "Завершён",
+      "basicInfo": "Основная информация",
+      "id": "ID",
+      "createdAt": "Создан",
+      "updatedAt": "Обновлён",
+      "mutexGroup": "Mutex группа"
+    },
+    "tabs": {
+      "overview": "Обзор",
+      "results": "Результаты",
+      "decisions": "Решения",
+      "settings": "Настройки"
     }
   },
   "apiKeys": {
@@ -215,5 +231,45 @@
     "resourceType_role": "Роль",
     "resourceType_user": "Пользователь",
     "resourceType_user_role": "Связь пользователь↔роль"
+  },
+  "dashboard": {
+    "title": "Дашборд",
+    "running": "Активные эксперименты",
+    "pendingDecisions": "Завершённые",
+    "totalExperiments": "Всего экспериментов",
+    "flagsSoon": "Активные флаги",
+    "comingSoon": "скоро",
+    "recentActivity": "Последние действия",
+    "noActivity": "Административных действий пока нет",
+    "quickActions": "Быстрые действия",
+    "newExperiment": "Новый эксперимент",
+    "newApiKey": "API ключи",
+    "viewAudit": "Журнал действий",
+    "manageUsers": "Пользователи и роли",
+    "viewAll": "Показать все"
+  },
+  "settings": {
+    "title": "Настройки",
+    "subtitle": "Тема, язык, административные ссылки",
+    "language": "Язык",
+    "languageHint": "Язык интерфейса. Сохраняется на устройстве.",
+    "theme": "Тема",
+    "themeHint": "Светлая или тёмная палитра.",
+    "currentTheme": "Текущая тема",
+    "adminSection": "Администрирование",
+    "adminHint": "Административные разделы. Часть из них требует роль admin.",
+    "apiKeysHint": "Управление API ключами для SDK.",
+    "about": "О платформе",
+    "version": "Версия",
+    "versionValue": "v3.0.0"
+  },
+  "export": {
+    "csv": "Экспорт CSV",
+    "success": "Загрузка CSV началась",
+    "failed": "Не удалось экспортировать"
+  },
+  "decisions": {
+    "empty": "Решений пока нет",
+    "comingSoon": "Журнал решений появится здесь после M-012."
   }
 }

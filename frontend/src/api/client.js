@@ -45,8 +45,17 @@ export const deleteExperiment = (id)    => api.delete(`/api/v1/experiments/${id}
 // ─── Analysis ────────────────────────────────────────────────────────────────
 export const analyzeExperiment = (id) => api.post(`/api/v1/experiments/${id}/analyze`)
 export const getResults        = (id) => api.get(`/api/v1/experiments/${id}/results`)
-export const getDailyResults = (id) =>
-  api.get(`/experiments/${id}/results/daily`)
+export const getDailyResults   = (id) =>
+  api.get(`/api/v1/experiments/${id}/results/daily`)
+
+// ─── CSV export (M-005) ──────────────────────────────────────────────────────
+// Returns a Blob so the ExportButton can trigger a file download. The
+// response interceptor skips the JSON parse — we want raw text/csv bytes.
+export const exportResults = (id) =>
+  api.get(`/api/v1/experiments/${id}/results/export?format=csv`, {
+    responseType: 'blob',
+  })
+
 // ─── Sample Size ──────────────────────────────────────────────────────────────
 export const getSampleSizeConversion = (p) =>
   api.get('/api/v1/stats/sample-size/conversion', { params: p })

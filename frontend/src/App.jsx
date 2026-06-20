@@ -25,10 +25,12 @@ import PageContainer from './components/PageContainer'
 import ApiKeysPage from './pages/ApiKeysPage'
 import AuditLogPage from './pages/AuditLogPage'
 import CreateExperiment from './pages/CreateExperiment'
+import DashboardPage from './pages/DashboardPage'
+import ExperimentDetailPage from './pages/ExperimentDetailPage'
 import ExperimentList from './pages/ExperimentList'
-import ExperimentResults from './pages/ExperimentResults'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
 
 function ProtectedRoute({ children }) {
@@ -78,6 +80,12 @@ export default function App() {
               className="text-sm text-muted-foreground hover:text-foreground"
             >
               {t('apiKeys.title')}
+            </Link>
+            <Link
+              to="/settings"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t('common.settings')}
             </Link>
             {Array.isArray(roles) && roles.includes('admin') && (
               <>
@@ -149,6 +157,16 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <PageContainer>
+                    <DashboardPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/experiments"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
                     <ExperimentList />
                   </PageContainer>
                 </ProtectedRoute>
@@ -169,7 +187,7 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <PageContainer>
-                    <ExperimentResults />
+                    <ExperimentDetailPage />
                   </PageContainer>
                 </ProtectedRoute>
               }
@@ -180,6 +198,16 @@ export default function App() {
                 <ProtectedRoute>
                   <PageContainer>
                     <ApiKeysPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <SettingsPage />
                   </PageContainer>
                 </ProtectedRoute>
               }

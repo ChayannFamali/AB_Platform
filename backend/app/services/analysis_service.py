@@ -1,8 +1,12 @@
+import csv
+import io
 import logging
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.db import Result
 from app.services.ai.prompts import MetricContext, build_result_prompt
@@ -129,3 +133,93 @@ async def run_and_save(db: AsyncSession, experiment_id: UUID) -> list[MetricAnal
 
     logger.info(f"Анализ сохранён: experiment={experiment_id}, строк={len(rows)}")
     return results
+
+
+# ── CSV export (M-005) ────────────────────────────────────────────────────────
+
+CSV_COLUMNS = [
+    "metric_name",
+    "variant",
+    "sample_size",
+    "mean",
+    "std_dev",
+    "p_value",
+    "ci_low",
+    "ci_high",
+    "relative_lift",
+    "is_significant",
+    "is_winner",
+    "test_used",
+    "achieved_mde",
+    "srm_detected",
+    "srm_p_value",
+]
+
+
+async def export_results_csv(db: AsyncSession, experiment_id: UUID) -> str:
+    """
+    Build an RFC 4180 CSV string of all saved results for the experiment.
+
+    One row per (metric, variant). `metric`/`variant` columns carry
+    human-readable names; numeric nullable fields are emitted as empty
+    strings when null so the file is friendlier to spreadsheet tools.
+
+    Raises ValueError if the experiment has no results yet.
+    """
+    rows = (
+        await db.execute(
+            select(Result)
+            .options(selectinload(Result.metric), selectinload(Result.variant))
+            .where(Result.experiment_id == experiment_id)
+        )
+    ).scalars().all()
+
+    if not rows:
+        raise ValueError(
+            f"No results for experiment={experiment_id}. "
+            "Run POST /experiments/{id}/analyze first."
+        )
+
+    # SRM is per-metric, not per-variant; carry it through by metric_id.
+    srm_by_metric: dict[UUID, tuple[bool, float | None]] = {
+        r.metric_id: (r.srm_detected, r.srm_p_value) for r in rows
+    }
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(
+        buffer,
+        fieldnames=CSV_COLUMNS,
+        quoting=csv.QUOTE_MINIMAL,
+        lineterminator="\r\n",  # RFC 4180
+    )
+    writer.writeheader()
+
+    for r in rows:
+        srm_detected, srm_p_value = srm_by_metric.get(r.metric_id, (False, None))
+        writer.writerow({
+            "metric_name":    r.metric.name if r.metric else "",
+            "variant":        r.variant.name if r.variant else "",
+            "sample_size":    r.sample_size,
+            "mean":           _fmt_float(r.mean),
+            "std_dev":        _fmt_float(r.std_dev),
+            "p_value":        _fmt_float(r.p_value),
+            "ci_low":         _fmt_float(r.confidence_interval_low),
+            "ci_high":        _fmt_float(r.confidence_interval_high),
+            "relative_lift":  _fmt_float(r.relative_lift),
+            "is_significant": "" if r.is_significant is None else bool(r.is_significant),
+            "is_winner":      bool(r.is_winner),
+            "test_used":      r.test_used or "",
+            "achieved_mde":   _fmt_float(r.achieved_mde),
+            "srm_detected":   bool(srm_detected),
+            "srm_p_value":    _fmt_float(srm_p_value),
+        })
+
+    return buffer.getvalue()
+
+
+def _fmt_float(value: float | None) -> str:
+    """Empty string for None so spreadsheet tools see blank cells, not 'None'."""
+    if value is None:
+        return ""
+    # Full precision — analysis numbers are already small floats.
+    return f"{value:.6f}"

@@ -145,6 +145,22 @@
       "test": "Test",
       "winner": "Winner",
       "notFound": "Experiment not found"
+    },
+    "detail": {
+      "summary": "Summary",
+      "startedAt": "Started",
+      "endedAt": "Ended",
+      "basicInfo": "Basic info",
+      "id": "ID",
+      "createdAt": "Created at",
+      "updatedAt": "Updated at",
+      "mutexGroup": "Mutex group"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "results": "Results",
+      "decisions": "Decisions",
+      "settings": "Settings"
     }
   },
   "apiKeys": {
@@ -215,5 +231,45 @@
     "resourceType_role": "Role",
     "resourceType_user": "User",
     "resourceType_user_role": "User–role link"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "running": "Running experiments",
+    "pendingDecisions": "Completed",
+    "totalExperiments": "Total experiments",
+    "flagsSoon": "Active flags",
+    "comingSoon": "soon",
+    "recentActivity": "Recent activity",
+    "noActivity": "No administrative actions yet",
+    "quickActions": "Quick actions",
+    "newExperiment": "New experiment",
+    "newApiKey": "API keys",
+    "viewAudit": "Audit log",
+    "manageUsers": "Users & roles",
+    "viewAll": "View all"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Theme, language, and admin shortcuts",
+    "language": "Language",
+    "languageHint": "Interface language. Saved per device.",
+    "theme": "Theme",
+    "themeHint": "Light or dark colour palette.",
+    "currentTheme": "Current theme",
+    "adminSection": "Admin",
+    "adminHint": "Administrative pages. Some require the admin role.",
+    "apiKeysHint": "Manage API keys for the SDK.",
+    "about": "About",
+    "version": "Version",
+    "versionValue": "v3.0.0"
+  },
+  "export": {
+    "csv": "Export CSV",
+    "success": "CSV download started",
+    "failed": "Export failed"
+  },
+  "decisions": {
+    "empty": "No decisions yet",
+    "comingSoon": "Decision log will appear here once M-012 lands."
   }
 }

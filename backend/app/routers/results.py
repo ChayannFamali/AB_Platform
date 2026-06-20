@@ -2,7 +2,8 @@ from collections import defaultdict
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,7 +18,7 @@ from app.schemas.result import (
     MetricResultResponse,
     VariantResultResponse,
 )
-from app.services.analysis_service import run_and_save
+from app.services.analysis_service import export_results_csv, run_and_save
 from app.services import rbac_service
 
 router = APIRouter()
@@ -225,4 +226,44 @@ async def get_daily_results(
             )
             for s in snapshots
         ],
+    )
+
+
+@router.get(
+    "/experiments/{experiment_id}/results/export",
+    response_class=PlainTextResponse,
+)
+async def export_results(
+    experiment_id: UUID,
+    format: str = Query(default="csv", description="Output format (csv only in v1)"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(rbac_service.require_permission("results:read")),
+):
+    """
+    Скачать результаты эксперимента в виде CSV (RFC 4180).
+
+    Колонки: metric_name, variant, sample_size, mean, std_dev, p_value,
+    ci_low, ci_high, relative_lift, is_significant, is_winner, test_used,
+    achieved_mde, srm_detected, srm_p_value.
+
+    404 — если для эксперимента ещё нет сохранённых результатов
+    (запустите POST /experiments/{id}/analyze).
+    """
+    if format.lower() != "csv":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported export format '{format}'. Only 'csv' is supported.",
+        )
+    try:
+        csv_text = await export_results_csv(db, experiment_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    filename = f"experiment_{experiment_id}_results.csv"
+    return PlainTextResponse(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
