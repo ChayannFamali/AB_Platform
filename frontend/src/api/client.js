@@ -73,3 +73,34 @@ export const updateUserActive = (userId, isActive) =>
   api.patch(`/api/v1/users/${userId}`, { is_active: isActive })
 
 export const getAuditLog    = (params = {}) => api.get('/api/v1/audit', { params })
+
+// ─── Feature Flags (M-009) ──────────────────────────────────────────────────
+export const getFlags = (params = {}) =>
+  api.get('/api/v1/flags', { params }).then((r) => r.data)
+
+export const getFlag = (id) =>
+  api.get(`/api/v1/flags/${id}`).then((r) => r.data)
+
+export const getFlagByKey = (key) =>
+  api.get(`/api/v1/flags/by-key/${key}`).then((r) => r.data)
+
+export const createFlag = (data) =>
+  api.post('/api/v1/flags', data).then((r) => r.data)
+
+export const updateFlag = (id, data) =>
+  api.patch(`/api/v1/flags/${id}`, data).then((r) => r.data)
+
+export const toggleFlag = (id, enabled) =>
+  api.patch(`/api/v1/flags/${id}/toggle`, { enabled }).then((r) => r.data)
+
+export const deleteFlag = (id) =>
+  api.delete(`/api/v1/flags/${id}`).then((r) => r.data)
+
+export const addFlagRule = (id, data) =>
+  api.post(`/api/v1/flags/${id}/rules`, data).then((r) => r.data)
+
+export const deleteFlagRule = (flagId, ruleId) =>
+  api.delete(`/api/v1/flags/${flagId}/rules/${ruleId}`).then((r) => r.data)
+
+export const getFlagSummary = () =>
+  api.get('/api/v1/flags/summary').then((r) => r.data)

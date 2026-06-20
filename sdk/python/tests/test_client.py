@@ -150,3 +150,150 @@ def test_context_manager_flushes_on_exit():
     # при выходе из with — flush
 
     assert len(resp.calls) == 1
+
+
+# ── Feature flags (M-009) ──────────────────────────────────────────────────
+
+
+@resp.activate
+def test_get_flag_returns_true_when_enabled():
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate",
+        json={"key": "new_checkout", "value": True, "reason": "rollout_in"},
+    )
+    client = ABPlatformClient("http://localhost:8000")
+    assert client.get_flag("user_1", "new_checkout") is True
+
+
+@resp.activate
+def test_get_flag_returns_false_when_disabled():
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate",
+        json={"key": "new_checkout", "value": False, "reason": "kill_switch"},
+    )
+    client = ABPlatformClient("http://localhost:8000")
+    assert client.get_flag("user_1", "new_checkout") is False
+
+
+@resp.activate
+def test_get_flag_returns_default_on_server_error():
+    """5xx → client returns default, never raises."""
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate",
+        status=500,
+    )
+    client = ABPlatformClient("http://localhost:8000")
+    assert client.get_flag("user_1", "any_flag", default=True) is True
+
+
+def test_get_flag_returns_default_when_server_down():
+    """Connection refused → client returns default, never raises."""
+    client = ABPlatformClient("http://nonexistent:9999", timeout=0.1)
+    assert client.get_flag("user_1", "any_flag", default=False) is False
+
+
+@resp.activate
+def test_get_flag_returns_false_for_missing_flag():
+    """Server returns `value=False, reason=not_found` → SDK returns False."""
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate",
+        json={"key": "missing", "value": False, "reason": "not_found"},
+    )
+    client = ABPlatformClient("http://localhost:8000")
+    assert client.get_flag("user_1", "missing") is False
+
+
+@resp.activate
+def test_get_flag_cached():
+    """Second call uses the cache — no second HTTP request."""
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate",
+        json={"key": "cached", "value": True, "reason": "rollout_in"},
+    )
+    client = ABPlatformClient("http://localhost:8000", cache_ttl=60)
+    assert client.get_flag("user_1", "cached") is True
+    assert client.get_flag("user_1", "cached") is True
+    assert client.get_flag("user_1", "cached") is True
+    assert len(resp.calls) == 1
+
+
+@resp.activate
+def test_get_flag_distinct_users_distinct_buckets():
+    """The cache key includes user_id — different users don't share cache."""
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate",
+        json={"key": "per_user", "value": True, "reason": "rollout_in"},
+    )
+    client = ABPlatformClient("http://localhost:8000")
+    client.get_flag("user_A", "per_user")
+    client.get_flag("user_B", "per_user")
+    assert len(resp.calls) == 2  # one per user
+
+
+@resp.activate
+def test_get_flags_batch():
+    """Batch evaluation fetches all missing keys in one HTTP request."""
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate-batch",
+        json={
+            "values": {"a": True, "b": False, "c": True},
+            "details": {},
+        },
+    )
+    client = ABPlatformClient("http://localhost:8000")
+    result = client.get_flags("user_1", ["a", "b", "c"])
+    assert result == {"a": True, "b": False, "c": True}
+    assert len(resp.calls) == 1
+
+
+@resp.activate
+def test_get_flags_uses_cache_for_already_resolved_keys():
+    """Keys already cached skip the batch endpoint."""
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate",
+        json={"key": "cached_flag", "value": True, "reason": "rollout_in"},
+    )
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate-batch",
+        json={"values": {"fresh_flag": False}, "details": {}},
+    )
+    client = ABPlatformClient("http://localhost:8000", cache_ttl=60)
+    client.get_flag("user_1", "cached_flag")           # single fetch
+    result = client.get_flags("user_1", ["cached_flag", "fresh_flag"])
+    # Only the batch endpoint is hit — the single-fetch path is not
+    # re-used for keys the cache already has.
+    assert result == {"cached_flag": True, "fresh_flag": False}
+    assert len([c for c in resp.calls if "/flags/evaluate-batch" in c.request.url]) == 1
+
+
+def test_get_flags_empty_list_returns_empty_dict():
+    client = ABPlatformClient("http://localhost:8000")
+    assert client.get_flags("user_1", []) == {}
+
+
+def test_get_flags_server_down_returns_all_defaults():
+    client = ABPlatformClient("http://nonexistent:9999", timeout=0.1)
+    result = client.get_flags("user_1", ["a", "b", "c"])
+    assert result == {"a": False, "b": False, "c": False}
+
+
+@resp.activate
+def test_get_flags_403_missing_scope_graceful():
+    """API key without `flags:read` returns 403 → SDK returns defaults."""
+    resp.add(
+        resp.POST,
+        "http://localhost:8000/api/v1/sdk/flags/evaluate-batch",
+        status=403,
+    )
+    client = ABPlatformClient("http://localhost:8000")
+    result = client.get_flags("user_1", ["x"])
+    assert result == {"x": False}

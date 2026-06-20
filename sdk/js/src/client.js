@@ -12,6 +12,13 @@ class ABPlatformClient {
    *
    * Без ключа (для локальной разработки):
    *   const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+   *
+   * Доступные методы (v0.2.0):
+   *   - getVariant(userId, experimentId) — эксперимент (M-001+)
+   *   - getFlag(userId, flagKey)         — feature-флаг (M-009)
+   *   - getFlags(userId, flagKeys)       — батч feature-флагов (M-009)
+   *   - trackEvent(...)                  — событие (M-001+)
+   *   - flush() / destroy()              — lifecycle
    */
   constructor({
     apiUrl,
@@ -81,6 +88,106 @@ class ABPlatformClient {
     }
 
     return defaultVariant;
+  }
+
+  /**
+   * Возвращает значение feature-флага для пользователя.
+   * Никогда не бросает исключение — при ошибке возвращает defaultValue.
+   *
+   * SDK uses the same TTL cache as variant lookups. Bucket math is
+   * server-side, so the SDK only ever sees the final boolean.
+   */
+  async getFlag(userId, flagKey, defaultValue = false) {
+    const cacheKey = `flag:${userId}:${flagKey}`;
+    const cached = this._cache.get(cacheKey);
+    if (cached !== null) {
+      return cached === 'true';
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => controller.abort(), this.timeout);
+
+      const response = await fetch(`${this.apiUrl}/api/v1/sdk/flags/evaluate`, {
+        method:  'POST',
+        headers: this._headers,
+        body:    JSON.stringify({ user_id: userId, flag_key: flagKey }),
+        signal:  controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const value = Boolean(data.value ?? defaultValue);
+        this._cache.set(cacheKey, value ? 'true' : 'false');
+        return value;
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.warn('ABPlatform: getFlag timeout');
+      } else {
+        console.warn('ABPlatform: getFlag failed:', err.message);
+      }
+    }
+
+    return defaultValue;
+  }
+
+  /**
+   * Batch evaluation — preferred for SDK startup when several flags
+   * are needed in one render path.
+   *
+   * Unknown keys default to false. Missing server → all defaults.
+   * Never rejects.
+   */
+  async getFlags(userId, flagKeys) {
+    if (!Array.isArray(flagKeys) || flagKeys.length === 0) {
+      return {};
+    }
+
+    const results = {};
+    const missing = [];
+
+    for (const key of flagKeys) {
+      const cacheKey = `flag:${userId}:${key}`;
+      const cached = this._cache.get(cacheKey);
+      if (cached !== null) {
+        results[key] = cached === 'true';
+      } else {
+        missing.push(key);
+      }
+    }
+
+    if (missing.length === 0) {
+      return results;
+    }
+
+    try {
+      const response = await fetch(`${this.apiUrl}/api/v1/sdk/flags/evaluate-batch`, {
+        method:  'POST',
+        headers: this._headers,
+        body:    JSON.stringify({ user_id: userId, flag_keys: missing }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const values = data.values || {};
+        for (const key of missing) {
+          const value = Boolean(values[key]);
+          results[key] = value;
+          this._cache.set(`flag:${userId}:${key}`, value ? 'true' : 'false');
+        }
+        return results;
+      }
+    } catch (err) {
+      console.warn('ABPlatform: getFlags failed:', err.message);
+    }
+
+    // Fill missing keys with defaults.
+    for (const key of missing) {
+      if (!(key in results)) results[key] = false;
+    }
+    return results;
   }
 
   /**

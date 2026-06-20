@@ -28,6 +28,8 @@ import CreateExperimentWizard from './pages/CreateExperimentWizard'
 import DashboardPage from './pages/DashboardPage'
 import ExperimentDetailPage from './pages/ExperimentDetailPage'
 import ExperimentList from './pages/ExperimentList'
+import FlagDetailPage from './pages/FlagDetailPage'
+import FlagListPage from './pages/FlagListPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import SampleSizeCalculatorPage from './pages/SampleSizeCalculatorPage'
@@ -87,6 +89,12 @@ export default function App() {
               className="text-sm text-muted-foreground hover:text-foreground"
             >
               {t('apiKeys.title')}
+            </Link>
+            <Link
+              to="/flags"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t('flags.navTitle')}
             </Link>
             <Link
               to="/settings"
@@ -245,6 +253,26 @@ export default function App() {
                 <ProtectedRoute>
                   <PageContainer>
                     <AuditLogPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/flags"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <FlagListPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/flags/:key"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <FlagDetailPage />
                   </PageContainer>
                 </ProtectedRoute>
               }

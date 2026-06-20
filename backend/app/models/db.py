@@ -362,6 +362,68 @@ class UserRole(Base):
     )
 
 
+# Feature Flags ───────────────────────────────────────────────────────
+#
+# M-009: Feature flag system (ADR-004). Two tables:
+#
+# - `feature_flags` — top-level flag config (key, kill switch, rollout).
+# - `flag_rules`    — per-flag overrides. `segment_id` is reserved for
+#   M-010 (Segments + Holdouts); for now it's a nullable UUID without
+#   an FK. When M-010 lands, rules with a non-null `segment_id` will
+#   match by segment membership; rules with NULL will act as a
+#   "default for everyone" override (first by priority wins).
+#
+# Assignment logic (see `app/services/flag_service.py`):
+#   1. flag.enabled == False → False (kill switch)
+#   2. rule with no segment_id and lowest priority → use rule.rollout_percentage
+#   3. otherwise → flag.rollout_percentage
+#   4. Bucket user (SHA256("flag:{key}:{user_id}") % 100) — deterministic.
+#   5. bucket < rollout_percentage → True, else False
+
+class FeatureFlag(Base):
+    __tablename__ = "feature_flags"
+
+    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key                = Column(String(100), nullable=False, unique=True)
+    name               = Column(String(255), nullable=False)
+    description        = Column(Text, nullable=True)
+    enabled            = Column(Boolean, nullable=False, server_default=text("true"))
+    rollout_percentage = Column(Float, nullable=False, server_default=text("0"))
+    created_by         = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at         = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at         = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    rules = relationship(
+        "FlagRule",
+        back_populates="flag",
+        cascade="all, delete-orphan",
+        order_by="FlagRule.priority.asc()",
+    )
+    created_by_user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_feature_flags_key", "key", unique=True),
+    )
+
+
+class FlagRule(Base):
+    __tablename__ = "flag_rules"
+
+    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    flag_id            = Column(UUID(as_uuid=True), ForeignKey("feature_flags.id", ondelete="CASCADE"), nullable=False)
+    segment_id         = Column(UUID(as_uuid=True), nullable=True)
+    rollout_percentage = Column(Float, nullable=False)
+    priority           = Column(Integer, nullable=False, server_default=text("0"))
+    enabled            = Column(Boolean, nullable=False, server_default=text("true"))
+    created_at         = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    flag = relationship("FeatureFlag", back_populates="rules")
+
+    __table_args__ = (
+        Index("ix_flag_rules_flag_priority", "flag_id", "priority"),
+    )
+
+
 # Audit Log ───────────────────────────────────────────────────────────
 #
 # M-004: Append-only audit trail for administrative mutations

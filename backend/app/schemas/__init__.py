@@ -47,6 +47,23 @@ from app.schemas.result import (
     VariantResultResponse,
 )
 
+# Flag schemas (M-009)
+from app.schemas.flag import (
+    FeatureFlagCreate,
+    FeatureFlagListItem,
+    FeatureFlagResponse,
+    FeatureFlagToggle,
+    FeatureFlagUpdate,
+    FlagEvaluateBatchRequest,
+    FlagEvaluateBatchResponse,
+    FlagEvaluateRequest,
+    FlagEvaluateResponse,
+    FlagRuleCreate,
+    FlagRuleResponse,
+    FlagsSummary,
+    PaginatedFlags,
+)
+
 # Re-export enums from models for convenience
 from app.models.db import ExperimentStatus, MetricType
 
@@ -86,6 +103,20 @@ __all__ = [
     "DailySnapshotItem",
     "MetricResultResponse",
     "VariantResultResponse",
+    # Flag (M-009)
+    "FeatureFlagCreate",
+    "FeatureFlagListItem",
+    "FeatureFlagResponse",
+    "FeatureFlagToggle",
+    "FeatureFlagUpdate",
+    "FlagEvaluateBatchRequest",
+    "FlagEvaluateBatchResponse",
+    "FlagEvaluateRequest",
+    "FlagEvaluateResponse",
+    "FlagRuleCreate",
+    "FlagRuleResponse",
+    "FlagsSummary",
+    "PaginatedFlags",
     # Enums
     "ExperimentStatus",
     "MetricType",

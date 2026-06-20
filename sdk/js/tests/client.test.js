@@ -165,3 +165,122 @@ describe('getAnonymousId', () => {
     expect(id.length).toBeGreaterThan(0);
   });
 });
+
+// ─── getFlag (M-009) ──────────────────────────────────────────────────────
+
+describe('getFlag', () => {
+  test('returns true when the flag is enabled', async () => {
+    fetch.mockResponseOnce(
+      JSON.stringify({ key: 'new_checkout', value: true, reason: 'rollout_in' })
+    );
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    const value = await client.getFlag('user_1', 'new_checkout');
+    expect(value).toBe(true);
+    await client.destroy();
+  });
+
+  test('returns false when the flag is disabled', async () => {
+    fetch.mockResponseOnce(
+      JSON.stringify({ key: 'new_checkout', value: false, reason: 'kill_switch' })
+    );
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    const value = await client.getFlag('user_1', 'new_checkout');
+    expect(value).toBe(false);
+    await client.destroy();
+  });
+
+  test('returns defaultValue on server error', async () => {
+    fetch.mockResponseOnce('Internal Server Error', { status: 500 });
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    const value = await client.getFlag('user_1', 'any', true);
+    expect(value).toBe(true);
+    await client.destroy();
+  });
+
+  test('returns defaultValue when fetch throws', async () => {
+    fetch.mockRejectOnce(new Error('Connection refused'));
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    const value = await client.getFlag('user_1', 'any', false);
+    expect(value).toBe(false);
+    await client.destroy();
+  });
+
+  test('caches the result — second call skips fetch', async () => {
+    fetch.mockResponseOnce(
+      JSON.stringify({ key: 'cached_flag', value: true, reason: 'rollout_in' })
+    );
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000', cacheTtl: 60_000 });
+    await client.getFlag('user_1', 'cached_flag');
+    await client.getFlag('user_1', 'cached_flag');
+    await client.getFlag('user_1', 'cached_flag');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await client.destroy();
+  });
+
+  test('distinct users have distinct cache entries', async () => {
+    fetch.mockResponse(
+      JSON.stringify({ key: 'per_user', value: true, reason: 'rollout_in' })
+    );
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    await client.getFlag('user_A', 'per_user');
+    await client.getFlag('user_B', 'per_user');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await client.destroy();
+  });
+});
+
+// ─── getFlags (M-009 batch) ────────────────────────────────────────────────
+
+describe('getFlags', () => {
+  test('returns all keys in one request when nothing is cached', async () => {
+    fetch.mockResponseOnce(
+      JSON.stringify({ values: { a: true, b: false, c: true }, details: {} })
+    );
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    const result = await client.getFlags('user_1', ['a', 'b', 'c']);
+    expect(result).toEqual({ a: true, b: false, c: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await client.destroy();
+  });
+
+  test('returns empty object for empty key list', async () => {
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    const result = await client.getFlags('user_1', []);
+    expect(result).toEqual({});
+    expect(fetch).not.toHaveBeenCalled();
+    await client.destroy();
+  });
+
+  test('uses cache for already-resolved keys — only fetches the missing ones', async () => {
+    fetch.mockResponseOnce(
+      JSON.stringify({ key: 'cached_flag', value: true, reason: 'rollout_in' })
+    );
+    fetch.mockResponseOnce(
+      JSON.stringify({ values: { fresh_flag: false }, details: {} })
+    );
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000', cacheTtl: 60_000 });
+    await client.getFlag('user_1', 'cached_flag');
+    const result = await client.getFlags('user_1', ['cached_flag', 'fresh_flag']);
+    expect(result).toEqual({ cached_flag: true, fresh_flag: false });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const lastCall = fetch.mock.calls[1];
+    expect(lastCall[0]).toContain('/flags/evaluate-batch');
+    await client.destroy();
+  });
+
+  test('returns all defaults when server is unreachable', async () => {
+    fetch.mockRejectOnce(new Error('Connection refused'));
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    const result = await client.getFlags('user_1', ['a', 'b', 'c']);
+    expect(result).toEqual({ a: false, b: false, c: false });
+    await client.destroy();
+  });
+
+  test('returns defaults when server returns 403 (missing scope)', async () => {
+    fetch.mockResponseOnce('Forbidden', { status: 403 });
+    const client = new ABPlatformClient({ apiUrl: 'http://localhost:8000' });
+    const result = await client.getFlags('user_1', ['x']);
+    expect(result).toEqual({ x: false });
+    await client.destroy();
+  });
+});

@@ -3,6 +3,31 @@
 ## [Unreleased]
 
 ### Added
+- M-009: Feature flags — kill switches + gradual rollouts + SDK contract
+  (ADR-004). Two new tables (`feature_flags`, `flag_rules`) with
+  `segment_id` reserved (nullable UUID, no FK yet — wired up by M-010).
+  UI router under `/api/v1/flags` (`flags:read` / `flags:write`); SDK
+  router under `/api/v1/sdk/flags` (scope `flags:read`). Bucket math is
+  deterministic SHA256 with a dedicated `flag:` key namespace so flag
+  outcomes stay independent of experiment assignments. Rule evaluation
+  resolves to `flag.rollout_percentage` by default; rules with
+  `segment_id=null` and the lowest `priority` act as "applies to
+  everyone" overrides — first match wins. Reason codes returned to the
+  SDK: `kill_switch`, `rollout_in`, `rollout_out`, `rule_override`,
+  `not_found`. Audit hooks on every mutation (create / update /
+  toggle / delete / add_rule / delete_rule). Frontend: new
+  `FlagListPage` (`/flags`) with summary stats + optimistic kill switch
+  + delete; new `FlagDetailPage` (`/flags/:key`) with config card,
+  rollout slider, and rule editor; Dashboard "Active flags" card wired
+  to `/api/v1/flags/summary`. New sub-components: `FlagToggle`,
+  `RolloutSlider`, `FlagStatusBadge`, `FlagRuleEditor`. Python SDK
+  v0.2.0: `get_flag(user_id, flag_key, default=False)` +
+  `get_flags(user_id, flag_keys)`. JS SDK v0.2.0: `getFlag` +
+  `getFlags`. Both SDKs reuse the existing TTL cache, batch
+  endpoints for SDK startup, and graceful degradation on timeout /
+  5xx / 403 (returns `default` instead of throwing). Existing SDK
+  methods (`get_variant` / `getVariant`, `track_event` /
+  `trackEvent`) are unchanged — v0.1.x clients keep working.
 - M-008: Real-time SSE updates — `GET /api/v1/events/stream?experiment_id=<uuid>&token=<jwt>`
   (ADR-003): JWT in `?token=` query (EventSource cannot send custom headers),
   Redis pub/sub fan-out via per-experiment channel `results:{experiment_id}`,
@@ -191,6 +216,33 @@
   deleted and replaced by `CreateExperimentWizard.test.jsx`.
 
 ### Notes
+- M-009 backend tests: 27 new flag tests pass (4 bucket-math unit
+  tests, 9 CRUD lifecycle, 2 rule CRUD, 6 evaluation incl. rule
+  override + 50% distribution check, 2 RBAC, 2 SDK scope, 2 audit).
+  Full backend suite **138 passed, 0 failed** (`pytest tests/ -v`).
+- M-009 frontend tests: 8 new tests across 3 files (3 FlagListPage,
+  3 FlagStatusBadge, 4 RolloutSlider — 1 shared assertion shape).
+  Full frontend suite **84 passed, 0 failed** across 29 test files
+  (`npm run test:run`).
+- M-009 frontend lint: clean (`npm run lint`).
+- M-009 frontend bundle: `npm run build` succeeds
+  (999 KB JS / 300 KB gzipped — +21 KB on top of the M-008 baseline
+  for the new flag pages + 4 sub-components).
+- M-009 Python SDK: 12 new tests (6 get_flag + 6 get_flags —
+  happy path, server error, connection refused, missing flag, caching,
+  per-user cache, batch, partial cache, empty list, all defaults,
+  403 missing scope). SDK suite **23 passed, 0 failed**
+  (`pytest sdk/python/tests/`).
+- M-009 JS SDK: 11 new tests (6 getFlag + 5 getFlags — same matrix).
+  SDK suite **26 passed, 0 failed** (`jest`).
+- M-009 migration verified: `alembic upgrade head` and
+  `downgrade -1` both run cleanly.
+- M-009 SDK backward compatibility: v0.1.x clients keep working —
+  `getVariant` / `trackEvent` / `flush` / `destroy` are unchanged.
+- M-009 segment targeting: deferred to M-010 (Segments + Holdouts).
+  `FlagRule.segment_id` is already in the schema (nullable UUID, no
+  FK) so M-010 only needs to add the FK and segment-membership check
+  in `flag_service._resolve_rollout`.
 - M-008 backend tests: 10 new SSE tests pass (5 format/wire-format
   unit tests, 2 publisher error-handling tests, 1 subscribe + parse
   test using real Redis, 2 auth tests for the SSE endpoint —

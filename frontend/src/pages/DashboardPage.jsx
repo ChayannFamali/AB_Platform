@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Beaker, ClipboardList, FlaskConical, ScrollText, Wrench } from 'lucide-react'
+import { Beaker, ClipboardList, Flag, FlaskConical, ScrollText } from 'lucide-react'
 
-import { getAuditLog, getExperiments } from '../api/client'
+import { getAuditLog, getExperiments, getFlagSummary } from '../api/client'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
@@ -11,18 +11,22 @@ import LoadingState from '../components/LoadingState'
 import { PageHeader } from '../components/PageContainer'
 
 const ACTION_VARIANT = {
-  create:        'success',
-  update:        'info',
-  delete:        'destructive',
-  assign:        'success',
-  revoke:        'warning',
-  toggle_active: 'secondary',
+  create:         'success',
+  update:         'info',
+  delete:         'destructive',
+  assign:         'success',
+  revoke:         'warning',
+  toggle_active:  'secondary',
+  toggle_enabled: 'secondary',
+  add_rule:       'info',
+  delete_rule:    'info',
 }
 
 const RESOURCE_VARIANT = {
-  role:      'default',
-  user:      'info',
-  user_role: 'secondary',
+  role:         'default',
+  user:         'info',
+  user_role:    'secondary',
+  feature_flag: 'warning',
 }
 
 export default function DashboardPage() {
@@ -38,6 +42,11 @@ export default function DashboardPage() {
     queryKey: ['audit', { limit: 5, offset: 0 }],
     queryFn: () =>
       getAuditLog({ limit: 5, offset: 0 }).then((r) => r.data),
+  })
+
+  const flagsQuery = useQuery({
+    queryKey: ['flagSummary'],
+    queryFn: () => getFlagSummary(),
   })
 
   const experiments = experimentsQuery.data?.items ?? []
@@ -77,11 +86,10 @@ export default function DashboardPage() {
             loading={experimentsQuery.isLoading}
           />
           <SummaryCard
-            icon={Wrench}
-            label={t('dashboard.flagsSoon')}
-            value="—"
-            hint={t('dashboard.comingSoon')}
-            disabled
+            icon={Flag}
+            label={t('dashboard.activeFlags')}
+            value={flagsQuery.data?.enabled_with_rollout ?? 0}
+            loading={flagsQuery.isLoading}
           />
         </div>
       )}
