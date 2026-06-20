@@ -24,12 +24,13 @@ import PageContainer from './components/PageContainer'
 
 import ApiKeysPage from './pages/ApiKeysPage'
 import AuditLogPage from './pages/AuditLogPage'
-import CreateExperiment from './pages/CreateExperiment'
+import CreateExperimentWizard from './pages/CreateExperimentWizard'
 import DashboardPage from './pages/DashboardPage'
 import ExperimentDetailPage from './pages/ExperimentDetailPage'
 import ExperimentList from './pages/ExperimentList'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import SampleSizeCalculatorPage from './pages/SampleSizeCalculatorPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
 
@@ -74,6 +75,12 @@ export default function App() {
               className="text-sm text-muted-foreground hover:text-foreground"
             >
               {t('experiments.new')}
+            </Link>
+            <Link
+              to="/tools/sample-size"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t('sampleSize.navTitle')}
             </Link>
             <Link
               to="/api-keys"
@@ -177,7 +184,17 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <PageContainer>
-                    <CreateExperiment />
+                    <CreateExperimentWizard />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tools/sample-size"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <SampleSizeCalculatorPage />
                   </PageContainer>
                 </ProtectedRoute>
               }

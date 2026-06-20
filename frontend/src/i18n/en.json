@@ -271,5 +271,43 @@
   "decisions": {
     "empty": "No decisions yet",
     "comingSoon": "Decision log will appear here once M-012 lands."
+  },
+  "sampleSize": {
+    "title": "Sample size calculator",
+    "navTitle": "Sample size",
+    "subtitle": "Pre-experiment power analysis. Conversion and continuous modes.",
+    "conversion": "Conversion",
+    "continuous": "Continuous",
+    "baselineRate": "Baseline rate",
+    "baselineHint": "e.g. 0.032 = 3.2%",
+    "mde": "MDE",
+    "mdeHint": "Absolute change you want to detect",
+    "baselineMean": "Baseline mean",
+    "meanHint": "Current mean (e.g. avg revenue per user)",
+    "baselineStd": "Baseline std dev",
+    "stdHint": "Standard deviation of the metric",
+    "mdeAbsolute": "MDE (absolute)",
+    "mdeAbsoluteHint": "Absolute change you want to detect",
+    "dailyTraffic": "Daily traffic",
+    "dailyTrafficHint": "Optional. Used to estimate days needed.",
+    "calculate": "Calculate",
+    "perVariant": "Per variant",
+    "total": "Total",
+    "days": "Days",
+    "alpha": "α",
+    "power": "1−β",
+    "error": "Calculation failed. Check your inputs.",
+    "explanation": "You need ~{{perVariant}} users per variant (total {{total}}) to detect a change from {{from}} to {{to}} with α={{alpha}} and power={{power}}."
+  },
+  "wizard": {
+    "step1": "Basics",
+    "step2": "Variants",
+    "step3": "Metrics",
+    "step4": "Review",
+    "back": "Back",
+    "review": {
+      "title": "Review",
+      "description": "Double-check the experiment before creating it."
+    }
   }
 }

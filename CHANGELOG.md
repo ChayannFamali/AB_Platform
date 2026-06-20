@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### Added
+- M-006: Create Experiment Wizard + Sample Size Calculator — 4-step
+  wizard at `/experiments/new` (Basics → Variants → Metrics → Review)
+  with per-step validation, back button state preservation, and inline
+  `SampleSizeCalculator` on step 3; standalone calculator page at
+  `/tools/sample-size`; shared `SampleSizeCalculator` component with
+  two tabs (Conversion + Continuous, calling the existing
+  `/api/v1/stats/sample-size/{conversion,revenue}` endpoints); new
+  sub-components `WizardStepper` (numbered progress indicator with
+  done/current/pending states) and `WizardStep` (header + footer with
+  Back/Next buttons); new API client function `getSampleSizeContinuous`;
+  nav link to the calculator; i18n keys (`wizard.step1-4`,
+  `wizard.review.*`, `sampleSize.*`) in `ru.json` + `en.json`.
 - M-005: Core pages — `DashboardPage` at `/` (summary cards: running
   experiments / completed / total + recent activity feed from audit log +
   quick action links; "active flags" card is a stub pending M-009);
@@ -115,6 +127,10 @@
   results-table logic). The `/experiments/:id` route now renders the
   new detail page. Old `ExperimentResults.test.jsx` was deleted and
   replaced by `ExperimentDetailPage.test.jsx`.
+- `frontend/src/pages/CreateExperiment.jsx` (M-006) — replaced by
+  `CreateExperimentWizard` (4 steps). The `/experiments/new` route
+  now renders the new wizard. Old `CreateExperiment.test.jsx` was
+  deleted and replaced by `CreateExperimentWizard.test.jsx`.
 
 ### Notes
 - M-001 bundle: 28 KB CSS / 907 KB JS (277 KB gzipped).
@@ -143,6 +159,15 @@
 - M-005 frontend bundle: `npm run build` succeeds (no new size budget
   concerns — DashboardPage + ExperimentDetailPage + SettingsPage +
   5 sub-components add ~12 KB gzipped on top of the M-001 baseline).
+- M-006 frontend tests: 48 passed, 0 failed across 17 test files
+  (`npm run test:run`) — added 9 new tests (3 WizardStepper,
+  3 SampleSizeCalculator, 4 CreateExperimentWizard, 1
+  SampleSizeCalculatorPage) and deleted the old
+  `CreateExperiment.test.jsx` (replaced by
+  `CreateExperimentWizard.test.jsx`).
+- M-006 frontend lint: clean (`npm run lint`).
+- M-006 backend: no changes; existing 86 tests still pass
+  (`pytest tests/ -v`).
 - M-003 migration verified: `alembic upgrade head` and `downgrade -1` both run
   cleanly on the test database.
 - The legacy `users.is_admin` column is retained as a deprecated read-only field

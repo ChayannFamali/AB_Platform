@@ -59,6 +59,8 @@ export const exportResults = (id) =>
 // ─── Sample Size ──────────────────────────────────────────────────────────────
 export const getSampleSizeConversion = (p) =>
   api.get('/api/v1/stats/sample-size/conversion', { params: p })
+export const getSampleSizeContinuous = (p) =>
+  api.get('/api/v1/stats/sample-size/revenue', { params: p })
 
 // ─── Users & Roles (M-003) + Audit Log (M-004) ───────────────────────────────
 export const getUsers       = (params = {}) => api.get('/api/v1/users',   { params })
