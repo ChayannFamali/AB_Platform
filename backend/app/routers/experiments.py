@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -11,13 +11,13 @@ from app.schemas.experiment import (
     ExperimentStatusUpdate, MutexGroupCreate, MutexGroupResponse,
 )
 from app.schemas import ExperimentCreate, ExperimentUpdate, ExperimentResponse, ExperimentStatus
-from app.services import experiment_service
-from fastapi import Query  
-from app.schemas.experiment import PaginatedExperiments 
+from app.services import experiment_service, rbac_service
+from app.schemas.experiment import PaginatedExperiments
+
 router = APIRouter()
 
 
-# Experiments 
+# Experiments
 
 @router.get("/experiments", response_model=PaginatedExperiments)
 async def list_experiments(
@@ -25,7 +25,7 @@ async def list_experiments(
     offset: int = Query(default=0,  ge=0,          description="Смещение"),
     status: ExperimentStatus | None = Query(default=None, description="Фильтр по статусу"),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("experiments:read")),
 ):
     items, total = await experiment_service.get_experiments(db, limit, offset, status)
     return PaginatedExperiments(
@@ -36,11 +36,13 @@ async def list_experiments(
         has_next=offset + limit < total,
         has_prev=offset > 0,
     )
+
+
 @router.post("/experiments", response_model=ExperimentResponse, status_code=status.HTTP_201_CREATED)
 async def create_experiment(
     data: ExperimentCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("experiments:create")),
 ):
     return await experiment_service.create_experiment(db, data)
 
@@ -49,7 +51,7 @@ async def create_experiment(
 async def get_experiment(
     experiment_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("experiments:read")),
 ):
     experiment = await experiment_service.get_experiment_by_id(db, experiment_id)
     if not experiment:
@@ -62,7 +64,7 @@ async def update_status(
     experiment_id: UUID,
     data: ExperimentStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("experiments:update")),
 ):
     experiment = await experiment_service.get_experiment_by_id(db, experiment_id)
     if not experiment:
@@ -77,7 +79,7 @@ async def update_status(
 async def delete_experiment(
     experiment_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("experiments:delete")),
 ):
     experiment = await experiment_service.get_experiment_by_id(db, experiment_id)
     if not experiment:
@@ -88,12 +90,12 @@ async def delete_experiment(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# Mutex Groups 
+# Mutex Groups
 
 @router.get("/mutex-groups", response_model=list[MutexGroupResponse])
 async def list_mutex_groups(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("experiments:read")),
 ):
     return await experiment_service.get_mutex_groups(db)
 
@@ -102,6 +104,6 @@ async def list_mutex_groups(
 async def create_mutex_group(
     data: MutexGroupCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("experiments:create")),
 ):
     return await experiment_service.create_mutex_group(db, data)

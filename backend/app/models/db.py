@@ -5,7 +5,7 @@ from enum import Enum
 from sqlalchemy import (
     Boolean, Column, Date, DateTime, Float,
     ForeignKey, Index, Integer, PrimaryKeyConstraint,
-    String, Text, UniqueConstraint, Enum as SAEnum,
+    String, Text, UniqueConstraint, Enum as SAEnum, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
@@ -264,6 +264,12 @@ class User(Base):
     created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
+    roles    = relationship(
+        "Role",
+        secondary="user_roles",
+        back_populates="users",
+        lazy="selectin",
+    )
 
 
 # ApiKey 
@@ -276,6 +282,12 @@ class ApiKey(Base):
     name         = Column(String(255), nullable=False)
     key          = Column(String(100), nullable=False, unique=True)
     is_active    = Column(Boolean, default=True, nullable=False)
+    scopes       = Column(
+        JSONB,
+        nullable=False,
+        server_default=text('[\"assignments:read\", \"events:write\"]'),
+        default=lambda: ["assignments:read", "events:write"],
+    )
     created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_used_at = Column(DateTime, nullable=True)
 
@@ -284,4 +296,60 @@ class ApiKey(Base):
     __table_args__ = (
         Index("ix_api_keys_key",  "key"),
         Index("ix_api_keys_user", "user_id"),
+    )
+
+
+# RBAC ──────────────────────────────────────────────────────────────────
+#
+# M-003: Role-based access control (ADR-006).
+# - `roles`            — predefined role definitions (admin/editor/analyst/viewer).
+# - `role_permissions` — many-to-many: role → permission string.
+# - `user_roles`       — many-to-many: user → role.
+# `users.is_admin` is retained as a deprecated field for one release cycle
+# (see migration 0015 for its removal).
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key         = Column(String(50), nullable=False, unique=True)
+    name        = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    users       = relationship("User", secondary="user_roles", back_populates="roles")
+    permissions = relationship(
+        "RolePermission",
+        back_populates="role",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        Index("uq_roles_key", "key", unique=True),
+    )
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+
+    role_id    = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+    permission = Column(String(100), primary_key=True)
+
+    role = relationship("Role", back_populates="permissions")
+
+    __table_args__ = (
+        Index("idx_role_permissions_permission", "permission"),
+    )
+
+
+class UserRole(Base):
+    __tablename__ = "user_roles"
+
+    user_id     = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role_id     = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+    assigned_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_user_roles_role_id", "role_id"),
     )

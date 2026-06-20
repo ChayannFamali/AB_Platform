@@ -2,12 +2,16 @@ import re
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 _EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
 
+# Default scopes for new API keys (matches DB server_default — preserves
+# backward compatibility with SDK v0.1.0).
+DEFAULT_API_KEY_SCOPES: list[str] = ["assignments:read", "events:write"]
 
-# Register / Login 
+
+# Register / Login
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=2, max_length=100)
@@ -32,13 +36,66 @@ class LoginRequest(BaseModel):
         return v.lower()
 
 
-class UserResponse(BaseModel):
-    id:         UUID
-    username:   str
-    email:      str
-    is_admin:   bool
-    created_at: datetime
+class RoleSummary(BaseModel):
+    """Minimal role payload for embedding inside UserResponse."""
+    id:   UUID
+    key:  str
+    name: str
+
     model_config = {"from_attributes": True}
+
+
+class UserResponse(BaseModel):
+    id:          UUID
+    username:    str
+    email:       str
+    is_admin:    bool
+    is_active:   bool
+    created_at:  datetime
+    # M-003: roles + flat permissions list (derived from all assigned roles).
+    # `is_admin` is retained for backward compat with the v1 contract — the
+    # authoritative check is now `roles[]` / `permissions[]`.
+    roles:       list[RoleSummary]   = Field(default_factory=list)
+    permissions: list[str]          = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_roles_and_permissions(cls, data):
+        """
+        When constructed from a User ORM object, `roles` and `permissions`
+        live in the eager-loaded `roles[].permissions[].permission` chain,
+        NOT on the User itself. Flatten them so the response includes both.
+
+        Accepts either an ORM User or a dict (already-prepared payloads).
+        """
+        if hasattr(data, "roles"):
+            roles = list(getattr(data, "roles", []) or [])
+            role_summaries = [
+                RoleSummary.model_validate(r) for r in roles
+            ]
+            perms: set[str] = set()
+            for r in roles:
+                for p in (getattr(r, "permissions", None) or []):
+                    # ORM attribute is the RolePermission row; its string
+                    # permission lives in `.permission`.
+                    perm_value = getattr(p, "permission", None)
+                    if perm_value is None and isinstance(p, str):
+                        perm_value = p
+                    if perm_value:
+                        perms.add(perm_value)
+            return {
+                "id":           getattr(data, "id", None),
+                "username":     getattr(data, "username", None),
+                "email":        getattr(data, "email", None),
+                "is_admin":     getattr(data, "is_admin", False),
+                "is_active":    getattr(data, "is_active", True),
+                "created_at":   getattr(data, "created_at", None),
+                "roles":        role_summaries,
+                "permissions":  sorted(perms),
+            }
+        return data
 
 
 class TokenResponse(BaseModel):
@@ -47,10 +104,18 @@ class TokenResponse(BaseModel):
     user:         UserResponse
 
 
-# API Keys 
+# API Keys
 
 class ApiKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
+    scopes: list[str] | None = Field(
+        default=None,
+        description=(
+            "Permission scopes. Defaults to "
+            "['assignments:read', 'events:write'] when omitted. "
+            "Use ['*'] to grant all SDK scopes."
+        ),
+    )
 
 
 class ApiKeyResponse(BaseModel):
@@ -58,6 +123,7 @@ class ApiKeyResponse(BaseModel):
     id:           UUID
     name:         str
     key:          str
+    scopes:       list[str]
     is_active:    bool
     created_at:   datetime
     last_used_at: datetime | None = None
@@ -69,6 +135,7 @@ class ApiKeyListItem(BaseModel):
     id:           UUID
     name:         str
     key_preview:  str
+    scopes:       list[str]
     is_active:    bool
     created_at:   datetime
     last_used_at: datetime | None = None
@@ -77,7 +144,11 @@ class ApiKeyListItem(BaseModel):
     def from_key(cls, key) -> "ApiKeyListItem":
         preview = key.key[:15] + "***" if len(key.key) > 15 else key.key
         return cls(
-            id=key.id, name=key.name, key_preview=preview,
-            is_active=key.is_active, created_at=key.created_at,
+            id=key.id,
+            name=key.name,
+            key_preview=preview,
+            scopes=key.scopes or [],
+            is_active=key.is_active,
+            created_at=key.created_at,
             last_used_at=key.last_used_at,
         )

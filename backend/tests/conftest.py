@@ -66,7 +66,14 @@ def _create_database(db_name: str) -> None:
 
 
 def _run_migrations(db_name: str) -> None:
-    """Apply Alembic migrations to test database."""
+    """Apply Alembic migrations to test database.
+
+    Uses `python -m alembic` rather than the `alembic` console script because
+    the venv's shebang may point to a path that no longer exists (the script
+    was generated against a different venv location). `python -m alembic`
+    resolves through the active interpreter regardless.
+    """
+    venv_python = str(_BACKEND_DIR / ".venv" / "bin" / "python")
     env = {
         **os.environ,
         "POSTGRES_DB":       db_name,
@@ -75,14 +82,17 @@ def _run_migrations(db_name: str) -> None:
         "POSTGRES_PASSWORD": settings.postgres_password,
     }
     result = subprocess.run(
-        ["alembic", "upgrade", "head"],
+        [venv_python, "-m", "alembic", "upgrade", "head"],
         env=env,
         capture_output=True,
         text=True,
         cwd=str(_BACKEND_DIR),
     )
     if result.returncode != 0:
-        raise RuntimeError(f"Alembic migrations failed:\n{result.stderr}")
+        raise RuntimeError(
+            f"Alembic migrations failed (code={result.returncode}):\n"
+            f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+        )
 
 
 # ── Session-level fixtures ────────────────────────────────────────────────────
@@ -157,6 +167,7 @@ async def clean_tables() -> None:
             TRUNCATE
                 api_keys,
                 users,
+                user_roles,
                 results_daily,
                 results,
                 events,

@@ -18,6 +18,7 @@ from app.schemas.result import (
     VariantResultResponse,
 )
 from app.services.analysis_service import run_and_save
+from app.services import rbac_service
 
 router = APIRouter()
 
@@ -98,7 +99,7 @@ def _compute_guardrail_violated(metric_results: list[Result]) -> bool:
 async def trigger_analysis(
     experiment_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("experiments:analyze")),
 ):
     """Ручной запуск анализа. Результаты сохраняются в БД."""
     try:
@@ -129,7 +130,7 @@ async def trigger_analysis(
 async def get_results(
     experiment_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("results:read")),
 ):
     """Возвращает последние сохранённые результаты из БД."""
     rows = await db.execute(
@@ -174,7 +175,7 @@ async def get_results(
 async def get_daily_results(
     experiment_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("results:read")),
 ):
     """
     Возвращает daily снапшоты результатов для trend-анализа.

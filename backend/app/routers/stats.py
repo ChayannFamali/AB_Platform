@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.dependencies import get_current_user
 from app.models.db import User
+from app.services import rbac_service
 from app.services.stats.sample_size import calculate_for_conversion, calculate_for_revenue
 
 router = APIRouter()
@@ -28,7 +29,7 @@ async def sample_size_conversion(
     alpha:         float = Query(default=0.05, gt=0, lt=1),
     power:         float = Query(default=0.80, gt=0, lt=1),
     daily_traffic: int | None = Query(default=None, gt=0),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("results:read")),
 ):
     if baseline_rate + mde >= 1:
         raise HTTPException(
@@ -50,7 +51,7 @@ async def sample_size_revenue(
     alpha:         float = Query(default=0.05, gt=0, lt=1),
     power:         float = Query(default=0.80, gt=0, lt=1),
     daily_traffic: int | None = Query(default=None, gt=0),
-    _: User = Depends(get_current_user),
+    _: User = Depends(rbac_service.require_permission("results:read")),
 ):
     try:
         result = calculate_for_revenue(
