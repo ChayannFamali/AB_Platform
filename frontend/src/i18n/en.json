@@ -384,5 +384,29 @@
         "description": "Always-valid p-value = {{sequential_fpr}} < α. Safe to stop — FPR is controlled at α for any number of peeks."
       }
     }
+  },
+  "sse": {
+    "toast": {
+      "srm": {
+        "title": "Sample Ratio Mismatch",
+        "description": "User distribution deviates from expected (p = {{p_value}})."
+      },
+      "winner": {
+        "title": "Clear winner",
+        "description": "Strong signal detected (relative lift {{lift}}%). Results refreshed."
+      },
+      "guardrail": {
+        "title": "Guardrail violated",
+        "description": "A guardrail metric moved significantly in the wrong direction."
+      },
+      "boundary": {
+        "title": "Sequential boundary crossed",
+        "description": "Always-valid p-value = {{sequential_fpr}} < α. Safe to stop."
+      },
+      "updated": {
+        "title": "Analysis complete",
+        "description": "Results refreshed."
+      }
+    }
   }
 }

@@ -3,17 +3,28 @@ import io
 import logging
 from uuid import UUID
 
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.db import Result
+from app.services import sse_manager
 from app.services.ai.prompts import MetricContext, build_result_prompt
 from app.services.ai.providers import get_ai_provider
+from app.services.redis_client import pool as redis_pool
 from app.services.stats.engine import MetricAnalysis, VariantAnalysis, run_analysis
 
 logger = logging.getLogger(__name__)
+
+
+# Insight.type values produced by app.services.stats.interpreter. Kept as
+# module-level constants so the publisher never depends on interpreter
+# internals.
+_INSIGHT_WINNER         = "clear_winner"
+_INSIGHT_GUARDRAIL      = "guardrail_violated"
+_INSIGHT_SEQ_BOUNDARY   = "sequential_boundary"
 
 
 def _find_control(variants: list[VariantAnalysis]) -> VariantAnalysis | None:
@@ -146,7 +157,85 @@ async def run_and_save(db: AsyncSession, experiment_id: UUID):
         await db.flush()
 
     logger.info(f"Анализ сохранён: experiment={experiment_id}, строк={len(rows)}")
+
+    # ── SSE fan-out (M-008) ─────────────────────────────────────────────
+    # Publish events to the per-experiment Redis channel so any open
+    # ExperimentDetailPage sees updates without a manual refresh.
+    # Failures here MUST NOT abort analysis — Redis may be down and the
+    # next poll/manual Analyze will pick up the changes anyway.
+    await _publish_sse_events(experiment_id, metric_results, analysis.insights)
+
     return analysis
+
+
+async def _publish_sse_events(
+    experiment_id: UUID,
+    metric_results: list[MetricAnalysis],
+    insights: list,
+) -> None:
+    """
+    Publish result_updated + alert events to the SSE channel.
+
+    Always emits `result_updated` after a successful analysis.
+    Emits `srm_alert`, `winner_detected`, `guardrail_violated`,
+    `sequential_boundary_crossed` only when the corresponding condition
+    is present. Multiple winners in a multi-metric experiment each fire
+    one event (one per insight), so the UI toast count reflects the
+    number of winning variants/metrics.
+    """
+    try:
+        async with Redis(connection_pool=redis_pool) as redis:
+            # `result_updated` is the baseline event — every analysis emits it.
+            await sse_manager.publish_experiment_event(
+                redis, experiment_id, "result_updated",
+                {"experiment_id": str(experiment_id)},
+            )
+
+            # SRM is per-metric (not per-variant) but we only need to alert once
+            # per analysis, with the worst (lowest) p_value.
+            srm_metrics = [m for m in metric_results if m.srm.srm_detected]
+            if srm_metrics:
+                worst = min(srm_metrics, key=lambda m: m.srm.p_value or 1.0)
+                await sse_manager.publish_experiment_event(
+                    redis, experiment_id, "srm_alert",
+                    {
+                        "experiment_id": str(experiment_id),
+                        "p_value":       worst.srm.p_value,
+                    },
+                )
+
+            # Insight-driven alerts — one event per matching insight so the UI
+            # can render a toast per metric/variant.
+            for insight in insights:
+                ins_type = getattr(insight, "type", "")
+                payload = {
+                    "experiment_id": str(experiment_id),
+                    "metric_id":     getattr(insight, "metric_id", None),
+                    "variant_id":    getattr(insight, "variant_id", None),
+                }
+                # Forward params so the toast can interpolate lift / FPR / etc.
+                for k, v in (getattr(insight, "params", None) or {}).items():
+                    payload.setdefault(k, v)
+
+                if ins_type == _INSIGHT_WINNER:
+                    await sse_manager.publish_experiment_event(
+                        redis, experiment_id, "winner_detected", payload,
+                    )
+                elif ins_type == _INSIGHT_GUARDRAIL:
+                    await sse_manager.publish_experiment_event(
+                        redis, experiment_id, "guardrail_violated", payload,
+                    )
+                elif ins_type == _INSIGHT_SEQ_BOUNDARY:
+                    await sse_manager.publish_experiment_event(
+                        redis, experiment_id, "sequential_boundary_crossed", payload,
+                    )
+    except Exception as e:
+        # Never let SSE publishing break the analysis pipeline.
+        logger.warning(
+            "sse_publish_skipped",
+            experiment_id=str(experiment_id),
+            error=str(e),
+        )
 
 
 # ── CSV export (M-005) ────────────────────────────────────────────────────────

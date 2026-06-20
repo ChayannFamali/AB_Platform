@@ -17,6 +17,7 @@ import ExperimentStatusCard from '../components/experiment/ExperimentStatusCard'
 import LoadingState from '../components/LoadingState'
 import { PageHeader } from '../components/PageContainer'
 import { toast } from '../hooks/use-toast'
+import { useSSE } from '../hooks/useSSE'
 
 const STATUS_VARIANT = {
   draft: 'secondary',
@@ -67,6 +68,58 @@ export default function ExperimentDetailPage() {
         variant: 'destructive',
         description: err.response?.data?.detail || t('errors.serverError'),
       }),
+  })
+
+  // SSE subscription (M-008). Auto-refresh TanStack Query on result_updated
+  // and show toast notifications for alerts so the user sees them even
+  // when they're on the Overview / Settings tabs.
+  useSSE(id, {
+    enabled: Boolean(id),
+    onEvent: (eventType, data) => {
+      if (eventType === 'result_updated') {
+        queryClient.invalidateQueries({ queryKey: ['experiment', id] })
+        queryClient.invalidateQueries({ queryKey: ['experiment-results', id] })
+        queryClient.invalidateQueries({ queryKey: ['experiment-daily', id] })
+        return
+      }
+      if (eventType === 'srm_alert') {
+        toast({
+          variant: 'destructive',
+          title: t('sse.toast.srm.title'),
+          description: t('sse.toast.srm.description', {
+            p_value:
+              data.p_value != null
+                ? data.p_value.toExponential(2)
+                : '—',
+          }),
+        })
+      } else if (eventType === 'winner_detected') {
+        toast({
+          variant: 'success',
+          title: t('sse.toast.winner.title'),
+          description: t('sse.toast.winner.description', {
+            lift: data.lift != null ? data.lift.toFixed(2) : '—',
+          }),
+        })
+      } else if (eventType === 'guardrail_violated') {
+        toast({
+          variant: 'destructive',
+          title: t('sse.toast.guardrail.title'),
+          description: t('sse.toast.guardrail.description'),
+        })
+      } else if (eventType === 'sequential_boundary_crossed') {
+        toast({
+          variant: 'success',
+          title: t('sse.toast.boundary.title'),
+          description: t('sse.toast.boundary.description', {
+            sequential_fpr:
+              data.sequential_fpr != null
+                ? data.sequential_fpr.toFixed(4)
+                : '—',
+          }),
+        })
+      }
+    },
   })
 
   if (experimentQuery.isLoading) {

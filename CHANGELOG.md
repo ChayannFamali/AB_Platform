@@ -3,6 +3,29 @@
 ## [Unreleased]
 
 ### Added
+- M-008: Real-time SSE updates — `GET /api/v1/events/stream?experiment_id=<uuid>&token=<jwt>`
+  (ADR-003): JWT in `?token=` query (EventSource cannot send custom headers),
+  Redis pub/sub fan-out via per-experiment channel `results:{experiment_id}`,
+  `text/event-stream` response with `Cache-Control: no-cache` and
+  `X-Accel-Buffering: no` headers; 30s `: ping` heartbeats; native
+  EventSource auto-reconnect; named events (`event: result_updated |
+  srm_alert | winner_detected | guardrail_violated |
+  sequential_boundary_crossed`) so the browser dispatches by type.
+  New `app/services/sse_manager.py` (publisher + subscriber +
+  format_sse/format_heartbeat/format_retry) and `app/routers/sse.py`
+  (StreamingResponse endpoint with `results:read` RBAC). Wire-up:
+  `analysis_service.run_and_save` publishes `result_updated` on every
+  analysis and the 4 alert types based on the rule-based insights engine
+  (SRM, clear winner, guardrail, sequential boundary). Frontend: new
+  `hooks/useSSE.js` (EventSource wrapper, auto-reconnect, JWT
+  injection, cleanup on unmount); `ExperimentDetailPage` subscribes on
+  mount, invalidates TanStack queries on `result_updated`, and shows
+  i18n toasts for SRM / winner / guardrail / boundary alerts (visible
+  from every tab, not just Results). nginx location block for
+  `/api/v1/events/stream` with `proxy_buffering off`,
+  `proxy_read_timeout 3600s`, `proxy_http_version 1.1`. i18n keys
+  (`sse.toast.{srm,winner,guardrail,boundary,updated}`) in
+  `ru.json` + `en.json`.
 - M-007: Statistical Intelligence — Sequential testing (mSPRT,
   Howard et al. 2021) + rule-based insights engine + 8 stat UX
   components. New `backend/app/services/stats/sequential.py` with
@@ -168,6 +191,26 @@
   deleted and replaced by `CreateExperimentWizard.test.jsx`.
 
 ### Notes
+- M-008 backend tests: 10 new SSE tests pass (5 format/wire-format
+  unit tests, 2 publisher error-handling tests, 1 subscribe + parse
+  test using real Redis, 2 auth tests for the SSE endpoint —
+  no-token 401 and bad-token 401). Full backend suite
+  **111 passed, 0 failed** (`pytest tests/ -v`).
+- M-008 frontend tests: 6 new useSSE hook tests added (disabled /
+  missing-token no-op, URL with token, subscribes to all 5 named event
+  types + connected, onEvent callback fires on typed event, close on
+  unmount). Full frontend suite **74 passed, 0 failed** across 26
+  test files (`npm run test:run`).
+- M-008 frontend lint: clean (`npm run lint`).
+- M-008 frontend bundle: `npm run build` succeeds
+  (978 KB JS / 294 KB gzipped — +3 KB on top of the M-007 baseline
+  for the `useSSE` hook).
+- M-008 SSE end-to-end test limitation: httpx 0.28's ASGITransport
+  buffers the entire streaming response body until completion, so
+  end-to-end HTTP tests of the SSE endpoint are unreliable. The
+  streaming flow is covered by direct `subscribe_experiment` tests
+  against real Redis, which exercises the same code path the SSE
+  endpoint uses internally. Auth + headers are verified by HTTP.
 - M-007 backend tests: 15 new tests pass (6 mSPRT golden numbers
   including CLT floor / zero-variance / large-effect / continuous
   metrics / monotonic sample-size; 9 interpreter rule tests covering

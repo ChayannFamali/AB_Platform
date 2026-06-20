@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.logging_config import configure_logging
-from app.routers import assignments, audit, auth, events, experiments, health, results, roles, stats
+from app.routers import assignments, audit, auth, events, experiments, health, results, roles, sse, stats
 from app.logging_config import get_logger
 
 configure_logging()
@@ -76,5 +76,6 @@ app.include_router(results.router,     prefix="/api/v1", tags=["results"])
 app.include_router(stats.router,       prefix="/api/v1", tags=["stats"])
 app.include_router(roles.router,       tags=["roles"])  # already has prefix="/api/v1"
 app.include_router(audit.router,       tags=["audit"])  # already has prefix="/api/v1/audit"
+app.include_router(sse.router,         tags=["sse"])    # already has prefix="/api/v1/events"
 app.include_router(assignments.router, prefix="/api/v1/sdk", tags=["sdk"])
 app.include_router(events.router,      prefix="/api/v1/sdk", tags=["sdk"])

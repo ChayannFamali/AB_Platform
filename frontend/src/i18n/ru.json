@@ -384,5 +384,29 @@
         "description": "Always-valid p-value = {{sequential_fpr}} < α. Можно останавливать — FPR контролируется на уровне α при любом числе подглядываний."
       }
     }
+  },
+  "sse": {
+    "toast": {
+      "srm": {
+        "title": "Sample Ratio Mismatch",
+        "description": "Распределение пользователей отклоняется от ожидаемого (p = {{p_value}})."
+      },
+      "winner": {
+        "title": "Явный победитель",
+        "description": "Обнаружен сильный сигнал (относительный lift {{lift}}%). Результаты обновлены."
+      },
+      "guardrail": {
+        "title": "Нарушен guardrail",
+        "description": "Одна из guardrail-метрик значимо сдвинулась в худшую сторону."
+      },
+      "boundary": {
+        "title": "Sequential boundary пересечена",
+        "description": "Always-valid p-value = {{sequential_fpr}} < α. Можно останавливать."
+      },
+      "updated": {
+        "title": "Анализ завершён",
+        "description": "Результаты обновлены."
+      }
+    }
   }
 }
