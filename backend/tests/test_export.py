@@ -29,6 +29,8 @@ EXPECTED_COLUMNS = [
     "achieved_mde",
     "srm_detected",
     "srm_p_value",
+    "sequential_fpr",
+    "sequential_boundary_crossed",
 ]
 
 

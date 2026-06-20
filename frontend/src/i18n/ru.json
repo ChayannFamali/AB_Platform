@@ -154,7 +154,10 @@
       "id": "ID",
       "createdAt": "Создан",
       "updatedAt": "Обновлён",
-      "mutexGroup": "Mutex группа"
+      "mutexGroup": "Mutex группа",
+      "sequential": "Sequential testing",
+      "sequentialOn": "Включён (mSPRT)",
+      "sequentialOff": "Выключен"
     },
     "tabs": {
       "overview": "Обзор",
@@ -304,10 +307,82 @@
     "step2": "Варианты",
     "step3": "Метрики",
     "step4": "Проверка",
+    "step5": "Настройки",
     "back": "Назад",
     "review": {
       "title": "Проверка",
       "description": "Перепроверьте эксперимент перед созданием."
+    },
+    "settings": {
+      "title": "Настройки анализа",
+      "description": "Опции, влияющие на интерпретацию результатов.",
+      "sequential": "Sequential testing (mSPRT)",
+      "sequentialHelp": "Всегда-валидный p-value — можно подглядывать в результаты без инфляции false positive rate. Используйте для долгих экспериментов, когда важно остановить победителя как можно раньше.",
+      "holdout": "Holdout-группа",
+      "holdoutHelp": "Holdout появится в M-010 (Segments + Holdouts). Здесь пока заглушка."
+    }
+  },
+  "stats": {
+    "significance": {
+      "high": "высокая",
+      "medium": "средняя",
+      "low": "слабая",
+      "none": "нет",
+      "noTest": "Тест не запускался",
+      "tooltip": "p = {{pValue}} (α = {{alpha}})"
+    },
+    "srm": {
+      "title": "Обнаружен Sample Ratio Mismatch",
+      "description": "Распределение пользователей по вариантам отклонилось от ожидаемого (p = {{pValue}}). Результатам нельзя доверять до исправления."
+    },
+    "power": {
+      "title": "Недостаточная чувствительность",
+      "description": "Текущий MDE = {{mde}} (~{{ratio}}% от baseline). Эксперимент не может обнаружить эффекты меньше этого. Дождитесь большей выборки."
+    },
+    "mde": {
+      "title": "MDE (post)",
+      "percentOfBaseline": "{{pct}}% от baseline"
+    },
+    "test": {
+      "zTest": "Z-тест",
+      "welchT": "Welch t-test",
+      "mannWhitney": "Mann-Whitney",
+      "deltaMethod": "Delta method"
+    },
+    "sequential": {
+      "chartTitle": "Always-valid p-value (mSPRT)",
+      "chartHelp": "Красная линия — α. Когда always-valid p-value опускается ниже неё, можно безопасно останавливать эксперимент (Howard et al. 2021)."
+    },
+    "insights": {
+      "title": "Выводы",
+      "srm": {
+        "title": "Sample Ratio Mismatch",
+        "description": "Распределение пользователей отклонилось от ожидаемого (p = {{p_value}})."
+      },
+      "guardrailViolated": {
+        "title": "Guardrail нарушен",
+        "description": "Одна из guardrail-метрик значимо ухудшилась. Победитель не будет помечен, даже если основная метрика выигрывает."
+      },
+      "clearWinner": {
+        "title": "Явный победитель",
+        "description": "p < 0.01 и относительный lift {{lift}}% — сильный сигнал, можно останавливать."
+      },
+      "likelyWinner": {
+        "title": "Вероятный победитель",
+        "description": "Эффект статистически значим, но lift небольшой. Подождите ещё немного для подтверждения."
+      },
+      "underpowered": {
+        "title": "Недостаточно данных",
+        "description": "MDE = {{achieved_mde}} превышает половину baseline. Тест не может обнаружить разумный эффект. Дождитесь большей выборки."
+      },
+      "noSignificance": {
+        "title": "Пока без значимого эффекта",
+        "description": "p = {{p_value}} > α, но тест имеет чувствительность. Продолжайте набор данных."
+      },
+      "sequentialBoundary": {
+        "title": "Sequential boundary пересечена",
+        "description": "Always-valid p-value = {{sequential_fpr}} < α. Можно останавливать — FPR контролируется на уровне α при любом числе подглядываний."
+      }
     }
   }
 }

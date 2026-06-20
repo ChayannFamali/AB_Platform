@@ -153,6 +153,7 @@ export default function ExperimentDetailPage() {
           <ExperimentResultsTab
             experimentId={id}
             experimentStatus={exp.status}
+            isSequential={exp.is_sequential}
           />
         </TabsContent>
 

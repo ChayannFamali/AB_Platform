@@ -154,7 +154,10 @@
       "id": "ID",
       "createdAt": "Created at",
       "updatedAt": "Updated at",
-      "mutexGroup": "Mutex group"
+      "mutexGroup": "Mutex group",
+      "sequential": "Sequential testing",
+      "sequentialOn": "Enabled (mSPRT)",
+      "sequentialOff": "Disabled"
     },
     "tabs": {
       "overview": "Overview",
@@ -304,10 +307,82 @@
     "step2": "Variants",
     "step3": "Metrics",
     "step4": "Review",
+    "step5": "Settings",
     "back": "Back",
     "review": {
       "title": "Review",
       "description": "Double-check the experiment before creating it."
+    },
+    "settings": {
+      "title": "Analysis settings",
+      "description": "Options that affect result interpretation.",
+      "sequential": "Sequential testing (mSPRT)",
+      "sequentialHelp": "Always-valid p-values — you can peek at results anytime without inflating the false positive rate. Best for long-running experiments where stopping the winner early matters.",
+      "holdout": "Holdout group",
+      "holdoutHelp": "Holdout arrives in M-010 (Segments + Holdouts). Stub for now."
+    }
+  },
+  "stats": {
+    "significance": {
+      "high": "high",
+      "medium": "medium",
+      "low": "low",
+      "none": "none",
+      "noTest": "No test run",
+      "tooltip": "p = {{pValue}} (α = {{alpha}})"
+    },
+    "srm": {
+      "title": "Sample Ratio Mismatch detected",
+      "description": "User distribution across variants deviates from expected (p = {{pValue}}). Results cannot be trusted until the assignment pipeline is fixed."
+    },
+    "power": {
+      "title": "Underpowered test",
+      "description": "Current MDE = {{mde}} (~{{ratio}}% of baseline). The experiment cannot detect effects smaller than this. Wait for more samples."
+    },
+    "mde": {
+      "title": "MDE (post)",
+      "percentOfBaseline": "{{pct}}% of baseline"
+    },
+    "test": {
+      "zTest": "Z-test",
+      "welchT": "Welch t-test",
+      "mannWhitney": "Mann-Whitney",
+      "deltaMethod": "Delta method"
+    },
+    "sequential": {
+      "chartTitle": "Always-valid p-value (mSPRT)",
+      "chartHelp": "Red line is α. When the always-valid p-value drops below it, you can safely stop the experiment (Howard et al. 2021)."
+    },
+    "insights": {
+      "title": "Insights",
+      "srm": {
+        "title": "Sample Ratio Mismatch",
+        "description": "User distribution deviates from expected (p = {{p_value}})."
+      },
+      "guardrailViolated": {
+        "title": "Guardrail violated",
+        "description": "A guardrail metric moved significantly in the wrong direction. The winner flag is suppressed even when the primary metric wins."
+      },
+      "clearWinner": {
+        "title": "Clear winner",
+        "description": "p < 0.01 and relative lift {{lift}}% — strong signal, safe to stop."
+      },
+      "likelyWinner": {
+        "title": "Likely winner",
+        "description": "Effect is statistically significant, but the lift is small. Wait a bit longer to confirm."
+      },
+      "underpowered": {
+        "title": "Underpowered",
+        "description": "MDE = {{achieved_mde}} exceeds half of the baseline. The test cannot detect a reasonable effect. Wait for more samples."
+      },
+      "noSignificance": {
+        "title": "No significant effect yet",
+        "description": "p = {{p_value}} > α, but the test has sensitivity. Continue collecting data."
+      },
+      "sequentialBoundary": {
+        "title": "Sequential boundary crossed",
+        "description": "Always-valid p-value = {{sequential_fpr}} < α. Safe to stop — FPR is controlled at α for any number of peeks."
+      }
     }
   }
 }

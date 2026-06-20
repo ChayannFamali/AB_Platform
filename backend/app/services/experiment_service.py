@@ -66,6 +66,7 @@ async def create_experiment(db: AsyncSession, data: ExperimentCreate) -> Experim
         description=data.description,
         traffic_percentage=data.traffic_percentage,
         mutex_group_id=data.mutex_group_id,
+        is_sequential=data.is_sequential,
     )
     db.add(experiment)
     await db.flush()  # получаем ID до создания вариантов

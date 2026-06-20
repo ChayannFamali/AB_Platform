@@ -26,6 +26,8 @@ class VariantResultResponse(BaseModel):
     denominator_mean: float | None = None
     numerator_relative_lift: float | None = None
     denominator_relative_lift: float | None = None
+    sequential_fpr: float | None = None
+    sequential_boundary_crossed: bool | None = None
 
     model_config = {"from_attributes": True}
 
@@ -42,12 +44,25 @@ class MetricResultResponse(BaseModel):
     variants: list[VariantResultResponse]
 
 
+class InsightResponse(BaseModel):
+    """Rule-based finding (M-007). `title` and `description` are i18n keys;
+    `params` provides interpolation values for the frontend translator."""
+    type: str
+    severity: str  # "success" | "warning" | "error" | "info"
+    title: str
+    description: str
+    metric_id: str | None = None
+    variant_id: str | None = None
+    params: dict = {}
+
+
 class AnalysisResponse(BaseModel):
     experiment_id: UUID
     metrics: list[MetricResultResponse]
+    insights: list[InsightResponse] = []
 
 
-# Cumulative dynamics 
+# Cumulative dynamics
 
 class DailySnapshotItem(BaseModel):
     """
@@ -68,6 +83,7 @@ class DailySnapshotItem(BaseModel):
     ci_high: float | None
     is_significant: bool | None
     test_used: str | None
+    sequential_fpr: float | None = None
 
 
 class DailyResultsResponse(BaseModel):

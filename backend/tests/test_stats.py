@@ -13,12 +13,16 @@ from app.services.stats.hypothesis_tests import (
     welch_t_test,
     z_test_proportions,
 )
+from app.services.stats.interpreter import InsightSeverity, interpret
 from app.services.stats.sample_size import (
     calculate_achieved_mde_conversion,
     calculate_achieved_mde_revenue,
     calculate_for_conversion,
 )
+from app.services.stats.sequential import always_valid_pvalue
 from app.services.stats.srm import check_srm
+from app.services.stats.srm import SRMResult
+from app.services.stats.engine import MetricAnalysis, VariantAnalysis
 
 
 # SRM ─
@@ -245,3 +249,284 @@ def test_achieved_mde_invalid_inputs():
     assert calculate_achieved_mde_conversion(1000, 0.0) == float("inf")  # rate = 0
     assert calculate_achieved_mde_conversion(1000, 1.0) == float("inf")  # rate = 1
     assert calculate_achieved_mde_revenue(100, 0.0) == float("inf")      # std = 0
+
+
+# mSPRT (M-007) ─────────────────────────────────────────────────────────────
+
+def _binomial_arrays(p_c: float, p_t: float, n_c: int, n_t: int, seed: int = 42):
+    """Build 0/1 arrays for control/treatment with given conversion rates."""
+    rng = np.random.default_rng(seed)
+    return (
+        rng.binomial(1, p_c, n_c).astype(float).tolist(),
+        rng.binomial(1, p_t, n_t).astype(float).tolist(),
+    )
+
+
+def test_msprt_no_effect():
+    """Одинаковые распределения → высокий p-value, граница не пересечена."""
+    ctrl, trt = _binomial_arrays(0.10, 0.10, n_c=2000, n_t=2000)
+    result = always_valid_pvalue(ctrl, trt)
+    assert result is not None
+    # No effect → p-value should be well above α
+    assert result.always_valid_pvalue > 0.10
+    assert result.boundary_crossed is False
+    assert result.likelihood_ratio < 1.0
+
+
+def test_msprt_strong_effect():
+    """Большой эффект → низкий p-value, граница пересечена."""
+    # 10% control vs 15% treatment at large n — relative lift +50%.
+    # mSPRT is inherently conservative vs fixed-horizon z-test, so we use
+    # n=5000 to push the always-valid p-value well below 0.01.
+    ctrl, trt = _binomial_arrays(0.10, 0.15, n_c=5000, n_t=5000)
+    result = always_valid_pvalue(ctrl, trt)
+    assert result is not None
+    # Strong effect → p < 0.01 (mSPRT floor for this effect size)
+    assert result.always_valid_pvalue < 0.01
+    assert result.boundary_crossed is True
+    assert result.likelihood_ratio > 100.0
+
+
+def test_msprt_small_sample_returns_none():
+    """n < 30 в любой группе → None (CLT floor)."""
+    ctrl = [0.1] * 20
+    trt  = [0.5] * 100
+    result = always_valid_pvalue(ctrl, trt)
+    assert result is None
+
+
+def test_msprt_zero_variance_returns_none():
+    """σ² = 0 (все значения идентичны) → None."""
+    ctrl = [1.0] * 100
+    trt  = [1.0] * 100
+    result = always_valid_pvalue(ctrl, trt)
+    assert result is None
+
+
+def test_msprt_continuous_metric():
+    """Revenue-style continuous data → mSPRT works on per-user values."""
+    rng = np.random.default_rng(42)
+    ctrl = rng.normal(loc=100, scale=20, size=500).tolist()
+    trt  = rng.normal(loc=115, scale=20, size=500).tolist()
+    result = always_valid_pvalue(ctrl, trt)
+    assert result is not None
+    assert result.always_valid_pvalue < 0.001
+    assert result.boundary_crossed is True
+
+
+def test_msprt_grows_strictly_with_sample_size():
+    """При одинаковом эффекте больший sample → меньший always-valid p-value."""
+    ctrl_small, trt_small = _binomial_arrays(0.10, 0.12, n_c=200, n_t=200)
+    ctrl_big,   trt_big   = _binomial_arrays(0.10, 0.12, n_c=5000, n_t=5000)
+
+    r_small = always_valid_pvalue(ctrl_small, trt_small)
+    r_big   = always_valid_pvalue(ctrl_big, trt_big)
+    assert r_small is not None and r_big is not None
+    assert r_big.always_valid_pvalue < r_small.always_valid_pvalue
+
+
+# Interpreter (M-007) ───────────────────────────────────────────────────────
+
+def _make_metric(
+    *,
+    is_guardrail: bool = False,
+    is_primary: bool = True,
+    srm_detected: bool = False,
+    srm_p_value: float = 0.5,
+    guardrail_violated: bool = False,
+    variants: list[VariantAnalysis] | None = None,
+) -> MetricAnalysis:
+    return MetricAnalysis(
+        metric_id=None,
+        metric_name="test_metric",
+        metric_type="conversion",
+        is_primary=is_primary,
+        is_guardrail=is_guardrail,
+        srm=SRMResult(
+            srm_detected=srm_detected,
+            p_value=srm_p_value,
+            chi2=0.0,
+            observed={},
+            expected={},
+        ),
+        variants=variants or [],
+        guardrail_violated=guardrail_violated,
+    )
+
+
+def _make_variant(
+    *,
+    name: str = "treatment",
+    p_value: float | None = 0.04,
+    effect_size: float | None = 0.1,
+    relative_lift: float | None = 3.0,
+    is_significant: bool | None = True,
+    achieved_mde: float | None = 0.005,
+    sequential_fpr: float | None = None,
+    sequential_boundary_crossed: bool | None = None,
+    mean: float = 0.10,
+) -> VariantAnalysis:
+    return VariantAnalysis(
+        variant_id=None,
+        variant_name=name,
+        sample_size=1000,
+        mean=mean,
+        p_value=p_value,
+        effect_size=effect_size,
+        relative_lift=relative_lift,
+        is_significant=is_significant,
+        achieved_mde=achieved_mde,
+        sequential_fpr=sequential_fpr,
+        sequential_boundary_crossed=sequential_boundary_crossed,
+    )
+
+
+def test_interpreter_srm_detected():
+    """SRM detected → один ERROR insight с srm_p_value в params."""
+    metric = _make_metric(
+        srm_detected=True, srm_p_value=0.001,
+        variants=[_make_variant()],
+    )
+    insights = interpret([metric])
+    srm_insights = [i for i in insights if i.type == "srm_detected"]
+    assert len(srm_insights) == 1
+    assert srm_insights[0].severity == InsightSeverity.ERROR
+    assert srm_insights[0].params["p_value"] == 0.001
+
+
+def test_interpreter_clear_winner():
+    """p<0.01 + lift>2% + positive effect + no guardrail → SUCCESS."""
+    metric = _make_metric(
+        variants=[
+            _make_variant(name="control", p_value=None, is_significant=None,
+                          effect_size=None, relative_lift=None),
+            _make_variant(
+                name="treatment",
+                p_value=0.005, is_significant=True,
+                effect_size=0.05, relative_lift=5.0,
+            ),
+        ],
+    )
+    insights = interpret([metric])
+    winners = [i for i in insights if i.type == "clear_winner"]
+    assert len(winners) == 1
+    assert winners[0].severity == InsightSeverity.SUCCESS
+    assert winners[0].params["lift"] == 5.0
+
+
+def test_interpreter_likely_winner():
+    """p<0.05 + significant + positive but lift<2% → likely_winner."""
+    metric = _make_metric(
+        variants=[
+            _make_variant(name="control", p_value=None, is_significant=None,
+                          effect_size=None, relative_lift=None),
+            _make_variant(
+                name="treatment",
+                p_value=0.04, is_significant=True,
+                effect_size=0.005, relative_lift=0.5,
+            ),
+        ],
+    )
+    insights = interpret([metric])
+    winners = [i for i in insights if i.type == "likely_winner"]
+    assert len(winners) == 1
+    assert winners[0].severity == InsightSeverity.SUCCESS
+
+
+def test_interpreter_underpowered():
+    """Не значимо + MDE > 50% от mean → WARNING underpowered."""
+    metric = _make_metric(
+        variants=[_make_variant(
+            name="control", p_value=None, mean=0.10,
+            effect_size=None, relative_lift=None,
+            is_significant=None,
+        ), _make_variant(
+            name="treatment", p_value=0.4, is_significant=False,
+            effect_size=0.001, relative_lift=1.0,
+            achieved_mde=0.06,  # > 50% of 0.10
+            mean=0.10,
+        )],
+    )
+    insights = interpret([metric])
+    underpowered = [i for i in insights if i.type == "underpowered"]
+    assert len(underpowered) == 1
+    assert underpowered[0].severity == InsightSeverity.WARNING
+
+
+def test_interpreter_no_significance():
+    """Не значимо + MDE small → INFO no_significance."""
+    metric = _make_metric(
+        variants=[_make_variant(
+            name="control", p_value=None, mean=0.10,
+            effect_size=None, relative_lift=None, is_significant=None,
+        ), _make_variant(
+            name="treatment", p_value=0.4, is_significant=False,
+            effect_size=0.001, relative_lift=1.0,
+            achieved_mde=0.005,  # < 50% of 0.10
+            mean=0.10,
+        )],
+    )
+    insights = interpret([metric])
+    no_sig = [i for i in insights if i.type == "no_significance"]
+    assert len(no_sig) == 1
+    assert no_sig[0].severity == InsightSeverity.INFO
+
+
+def test_interpreter_guardrail_violated():
+    """Guardrail violation → один ERROR insight на эксперимент."""
+    metric = _make_metric(guardrail_violated=True)
+    insights = interpret([metric])
+    guardrail = [i for i in insights if i.type == "guardrail_violated"]
+    assert len(guardrail) == 1
+    assert guardrail[0].severity == InsightSeverity.ERROR
+
+
+def test_interpreter_sequential_boundary():
+    """Sequential experiment + boundary crossed → INFO insight."""
+    metric = _make_metric(
+        variants=[
+            _make_variant(name="control", p_value=None, is_significant=None,
+                          effect_size=None, relative_lift=None),
+            _make_variant(
+                name="treatment",
+                sequential_fpr=0.03, sequential_boundary_crossed=True,
+                p_value=0.04, is_significant=True,
+                effect_size=0.005, relative_lift=0.5,
+            ),
+        ],
+    )
+    insights = interpret([metric], is_sequential=True)
+    seq = [i for i in insights if i.type == "sequential_boundary_crossed"]
+    assert len(seq) == 1
+    assert seq[0].severity == InsightSeverity.INFO
+    assert seq[0].params["sequential_fpr"] == 0.03
+
+
+def test_interpreter_sequential_boundary_only_for_sequential_experiments():
+    """Boundary crossed, но is_sequential=False → insight не emit."""
+    metric = _make_metric(
+        variants=[
+            _make_variant(name="control", p_value=None, is_significant=None,
+                          effect_size=None, relative_lift=None),
+            _make_variant(
+                name="treatment",
+                sequential_fpr=0.03, sequential_boundary_crossed=True,
+                p_value=0.04, is_significant=True,
+                effect_size=0.005, relative_lift=0.5,
+            ),
+        ],
+    )
+    insights = interpret([metric], is_sequential=False)
+    seq = [i for i in insights if i.type == "sequential_boundary_crossed"]
+    assert len(seq) == 0
+
+
+def test_interpreter_srm_emitted_once_for_experiment():
+    """Если SRM у нескольких метрик → emit только один insight."""
+    metric_a = _make_metric(srm_detected=True, srm_p_value=0.001,
+                            variants=[_make_variant()])
+    metric_b = _make_metric(srm_detected=True, srm_p_value=0.001,
+                            variants=[_make_variant(name="variant_b")])
+    insights = interpret([metric_a, metric_b])
+    srm_insights = [i for i in insights if i.type == "srm_detected"]
+    assert len(srm_insights) == 1

@@ -3,6 +3,41 @@
 ## [Unreleased]
 
 ### Added
+- M-007: Statistical Intelligence — Sequential testing (mSPRT,
+  Howard et al. 2021) + rule-based insights engine + 8 stat UX
+  components. New `backend/app/services/stats/sequential.py` with
+  closed-form log-space mSPRT statistic (`always_valid_pvalue`,
+  `rho_max=0.001`, returns `None` for n<30); new
+  `backend/app/services/stats/interpreter.py` with six rules
+  (SRM detected → ERROR, clear winner → SUCCESS at p<0.01 + lift>2%,
+  likely winner → SUCCESS at p<0.05, underpowered → WARNING when
+  MDE > 50% of baseline, guardrail violated → ERROR, no significance
+  yet → INFO, sequential boundary crossed → INFO for sequential
+  experiments); migration `0008_sequential_results` adding
+  `experiments.is_sequential`, `results.sequential_fpr`,
+  `results.sequential_boundary_crossed`, and
+  `results_daily.sequential_fpr`; mSPRT wired into the analysis
+  engine (conversion + revenue/duration branches — ratio metrics
+  skipped for now); engine now returns a new
+  `ExperimentAnalysis(metrics, insights)` wrapper so the router can
+  return `insights` at the top level of the analysis response;
+  `experiment_service.create_experiment` accepts
+  `is_sequential: bool`; CSV export extended with two new columns
+  (`sequential_fpr`, `sequential_boundary_crossed`); wizard Step 5
+  «Settings» exposing the sequential toggle (and a holdout-group
+  placeholder for M-010) so wizard now has 5 steps
+  (Basics → Variants → Metrics → Settings → Review); results tab
+  renders `<InsightPanel>` above all metric tables when insights
+  are present and `<SequentialPValueChart>` (recharts) for
+  sequential experiments; 8 new frontend components in
+  `frontend/src/components/stats/` (`SignificanceBadge`,
+  `SRMAlert`, `PowerWarning`, `CIBar`, `AchievedMDEBlock`,
+  `TestBadge`, `SequentialPValueChart`, `InsightPanel`) — each with
+  i18n keys and unit tests; `ExperimentResultsTab` refactored to
+  use `SignificanceBadge` + `TestBadge` + `SRMAlert` instead of
+  inline helpers; `ExperimentSettingsTab` shows the `is_sequential`
+  flag; i18n keys (`stats.*`, `wizard.step5`, `wizard.settings.*`,
+  `experiments.detail.sequential*`) in `ru.json` + `en.json`.
 - M-006: Create Experiment Wizard + Sample Size Calculator — 4-step
   wizard at `/experiments/new` (Basics → Variants → Metrics → Review)
   with per-step validation, back button state preservation, and inline
@@ -133,6 +168,23 @@
   deleted and replaced by `CreateExperimentWizard.test.jsx`.
 
 ### Notes
+- M-007 backend tests: 15 new tests pass (6 mSPRT golden numbers
+  including CLT floor / zero-variance / large-effect / continuous
+  metrics / monotonic sample-size; 9 interpreter rule tests covering
+  every insight type). Full backend suite
+  **101 passed, 0 failed** (`pytest tests/ -v`).
+- M-007 frontend tests: 8 new stat-component tests + 1 wizard test
+  added. Full frontend suite **68 passed, 0 failed** across 25
+  test files (`npm run test:run`).
+- M-007 frontend lint: clean (`npm run lint`).
+- M-007 frontend bundle: `npm run build` succeeds
+  (975 KB JS / 294 KB gzipped — 8 new stat components add ~3 KB
+  gzipped on top of the M-006 baseline; recharts is already in the
+  bundle so the sequential chart adds no new dependency weight).
+- M-007 migration verified: `alembic upgrade head` and
+  `downgrade -1` both run cleanly on the test database.
+- M-006 backend: no changes; existing 86 tests still pass
+  (`pytest tests/ -v`).
 - M-001 bundle: 28 KB CSS / 907 KB JS (277 KB gzipped).
 - M-002 tests: 29 passed, 0 failed across 10 test files
   (`npm run test:run`).

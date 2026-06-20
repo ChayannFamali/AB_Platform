@@ -100,6 +100,7 @@ async def snapshot_daily_results(ctx: dict) -> dict:
                 "ci_high":        r.confidence_interval_high,
                 "is_significant": r.is_significant,
                 "test_used":      r.test_used,
+                "sequential_fpr": r.sequential_fpr,
                 "created_at":     datetime.utcnow(),
             }
             for r in results
@@ -118,6 +119,7 @@ async def snapshot_daily_results(ctx: dict) -> dict:
                 "ci_high":        stmt.excluded.ci_high,
                 "is_significant": stmt.excluded.is_significant,
                 "test_used":      stmt.excluded.test_used,
+                "sequential_fpr": stmt.excluded.sequential_fpr,
             },
         )
         await db.execute(stmt)

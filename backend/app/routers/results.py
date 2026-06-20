@@ -15,6 +15,7 @@ from app.schemas.result import (
     AnalysisResponse,
     DailyResultsResponse,
     DailySnapshotItem,
+    InsightResponse,
     MetricResultResponse,
     VariantResultResponse,
 )
@@ -49,6 +50,8 @@ def _build_variant_response(va) -> VariantResultResponse:
         denominator_mean=va.denominator_mean,
         numerator_relative_lift=va.numerator_relative_lift,
         denominator_relative_lift=va.denominator_relative_lift,
+        sequential_fpr=va.sequential_fpr,
+        sequential_boundary_crossed=va.sequential_boundary_crossed,
     )
 
 
@@ -75,6 +78,20 @@ def _build_variant_response_from_db(r: Result) -> VariantResultResponse:
         denominator_mean=r.denominator_mean,
         numerator_relative_lift=r.numerator_relative_lift,
         denominator_relative_lift=r.denominator_relative_lift,
+        sequential_fpr=r.sequential_fpr,
+        sequential_boundary_crossed=r.sequential_boundary_crossed,
+    )
+
+
+def _build_insight_response(ins) -> InsightResponse:
+    return InsightResponse(
+        type=ins.type,
+        severity=ins.severity.value if hasattr(ins.severity, "value") else ins.severity,
+        title=ins.title,
+        description=ins.description,
+        metric_id=ins.metric_id,
+        variant_id=ins.variant_id,
+        params=ins.params,
     )
 
 
@@ -104,7 +121,7 @@ async def trigger_analysis(
 ):
     """Ручной запуск анализа. Результаты сохраняются в БД."""
     try:
-        metric_results = await run_and_save(db, experiment_id)
+        analysis = await run_and_save(db, experiment_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -122,8 +139,9 @@ async def trigger_analysis(
                 guardrail_violated=m.guardrail_violated,
                 variants=[_build_variant_response(va) for va in m.variants],
             )
-            for m in metric_results
+            for m in analysis.metrics
         ],
+        insights=[_build_insight_response(ins) for ins in analysis.insights],
     )
 
 
@@ -169,7 +187,7 @@ async def get_results(
             )
         )
 
-    return AnalysisResponse(experiment_id=experiment_id, metrics=metrics)
+    return AnalysisResponse(experiment_id=experiment_id, metrics=metrics, insights=[])
 
 
 @router.get("/experiments/{experiment_id}/results/daily", response_model=DailyResultsResponse)
@@ -223,6 +241,7 @@ async def get_daily_results(
                 ci_high=s.ci_high,
                 is_significant=s.is_significant,
                 test_used=s.test_used,
+                sequential_fpr=s.sequential_fpr,
             )
             for s in snapshots
         ],

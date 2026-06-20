@@ -25,17 +25,17 @@ import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import EmptyState from '../EmptyState'
 import LoadingState from '../LoadingState'
+import InsightPanel from '../stats/InsightPanel'
+import SequentialPValueChart from '../stats/SequentialPValueChart'
+import SignificanceBadge from '../stats/SignificanceBadge'
+import SRMAlert from '../stats/SRMAlert'
+import TestBadge from '../stats/TestBadge'
 import { toast } from '../../hooks/use-toast'
 
 const fmt = (v, type) => {
   if (v == null) return '—'
   if (type === 'conversion') return `${(v * 100).toFixed(2)}%`
   return v.toFixed(4)
-}
-
-const pFmt = (v) => {
-  if (v == null) return '—'
-  return v < 0.001 ? '<0.001' : v.toFixed(3)
 }
 
 const fmtMde = (mde, metricType) => {
@@ -53,39 +53,33 @@ const LINE_COLORS = [
   '#4f46e5', '#059669', '#dc2626', '#d97706', '#7c3aed', '#0891b2',
 ]
 
-const TEST_META = {
-  mann_whitney:  { label: 'Mann-Whitney', variant: 'warning' },
-  welch_t_test:  { label: 'Welch t-test',  variant: 'info' },
-  z_test:        { label: 'Z-test',        variant: 'info' },
-  delta_method:  { label: 'Δ Delta method', variant: 'success' },
+function NormalityTag({ isNormal }) {
+  if (isNormal == null) return null
+  return isNormal === false ? (
+    <span
+      className="cursor-help text-xs text-amber-600"
+      title="Shapiro-Wilk p < 0.05 — ненормальное распределение"
+    >
+      ⚠ Non-normal
+    </span>
+  ) : (
+    <span
+      className="cursor-help text-xs text-emerald-600"
+      title="Shapiro-Wilk: нормальное распределение"
+    >
+      ✓ Normal
+    </span>
+  )
 }
 
-function TestBadge({ testUsed, isNormal }) {
-  if (!testUsed) return <span className="text-muted-foreground">—</span>
-  const meta = TEST_META[testUsed] ?? { label: testUsed, variant: 'secondary' }
+function TestBadgeWithNormality({ testUsed, isNormal }) {
   const showNormality =
     (testUsed === 'welch_t_test' || testUsed === 'mann_whitney') &&
-    isNormal !== null &&
-    isNormal !== undefined
+    isNormal != null
   return (
     <div className="flex flex-col items-start gap-1">
-      <Badge variant={meta.variant}>{meta.label}</Badge>
-      {showNormality &&
-        (isNormal === false ? (
-          <span
-            className="cursor-help text-xs text-amber-600"
-            title="Shapiro-Wilk p < 0.05 — ненормальное распределение"
-          >
-            ⚠ Non-normal
-          </span>
-        ) : (
-          <span
-            className="cursor-help text-xs text-emerald-600"
-            title="Shapiro-Wilk: нормальное распределение"
-          >
-            ✓ Normal
-          </span>
-        ))}
+      <TestBadge testUsed={testUsed} />
+      {showNormality && <NormalityTag isNormal={isNormal} />}
     </div>
   )
 }
@@ -267,7 +261,11 @@ function DynamicsChart({ metricId, snapshots, treatmentVariants }) {
   )
 }
 
-export default function ExperimentResultsTab({ experimentId, experimentStatus }) {
+export default function ExperimentResultsTab({
+  experimentId,
+  experimentStatus,
+  isSequential = false,
+}) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
@@ -315,6 +313,7 @@ export default function ExperimentResultsTab({ experimentId, experimentStatus })
 
   const results = resultsQuery.data
   const dailyResults = dailyQuery.data
+  const insights = results?.insights ?? []
 
   return (
     <>
@@ -343,6 +342,18 @@ export default function ExperimentResultsTab({ experimentId, experimentStatus })
         </Alert>
       )}
 
+      {insights.length > 0 && (
+        <div className="mb-4">
+          <InsightPanel insights={insights} />
+        </div>
+      )}
+
+      {isSequential && dailyResults?.snapshots && (
+        <div className="mb-4">
+          <SequentialPValueChart snapshots={dailyResults.snapshots} />
+        </div>
+      )}
+
       {results?.metrics?.map((metric) => {
         const treatmentVariants = (metric.variants || [])
           .filter((v) => v.variant_name !== 'control')
@@ -365,14 +376,9 @@ export default function ExperimentResultsTab({ experimentId, experimentStatus })
             </CardHeader>
             <CardContent>
               {metric.srm_detected && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>
-                    <strong>Sample Ratio Mismatch</strong> (p=
-                    {pFmt(metric.srm_p_value)})
-                    <br />
-                    {t('experiments.results.srmWarning')}
-                  </AlertDescription>
-                </Alert>
+                <div className="mb-4">
+                  <SRMAlert pValue={metric.srm_p_value} />
+                </div>
               )}
 
               {metric.guardrail_violated && (
@@ -440,9 +446,11 @@ export default function ExperimentResultsTab({ experimentId, experimentStatus })
                             '—'
                           )}
                         </td>
-                        <td className="px-2 py-2">{pFmt(v.p_value)}</td>
                         <td className="px-2 py-2">
-                          <TestBadge
+                          <SignificanceBadge pValue={v.p_value} />
+                        </td>
+                        <td className="px-2 py-2">
+                          <TestBadgeWithNormality
                             testUsed={v.test_used}
                             isNormal={v.is_normal}
                           />

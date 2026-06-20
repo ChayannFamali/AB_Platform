@@ -51,15 +51,25 @@ describe('CreateExperimentWizard', () => {
     }).then((els) => expect(els.length).toBeGreaterThan(0))
   })
 
-  it('renders the stepper with four numbered steps', () => {
+  it('renders the stepper with five numbered steps', () => {
     const { findAllByText } = renderWithProviders(
       <CreateExperimentWizard />,
       { route: '/experiments/new' },
     )
     return findAllByText('1').then(() => {
       // Step 1 is current (no number rendered, just an active state);
-      // steps 2, 3, 4 are pending and show their numbers.
-      // Just verify the page rendered without error and stepper is in DOM.
+      // steps 2-5 are pending and show their numbers.
+      // Verify the page rendered without error and stepper is in DOM.
     })
+  })
+
+  it('exposes step 5 label (Settings) in the stepper', async () => {
+    const { findAllByText } = renderWithProviders(
+      <CreateExperimentWizard />,
+      { route: '/experiments/new' },
+    )
+    // "Settings" / "Настройки" appears in the WizardStepper label list.
+    const matches = await findAllByText(/Settings|Настройки/i)
+    expect(matches.length).toBeGreaterThan(0)
   })
 })

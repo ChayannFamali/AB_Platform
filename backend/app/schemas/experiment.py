@@ -84,6 +84,15 @@ class ExperimentCreate(BaseModel):
     mutex_group_id: UUID | None = None
     variants: list[VariantCreate] = Field(..., min_length=2)
     metrics: list[MetricCreate] = Field(..., min_length=1)
+    is_sequential: bool = Field(
+        default=False,
+        description=(
+            "Opt-in to always-valid sequential testing (mSPRT). "
+            "When true, the engine computes an always-valid p-value alongside "
+            "the fixed-horizon test; users may peek at results anytime without "
+            "inflating the false-positive rate."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_splits(self) -> "ExperimentCreate":
@@ -118,6 +127,7 @@ class ExperimentResponse(BaseModel):
     mutex_group_id: UUID | None
     started_at: datetime | None
     ended_at: datetime | None
+    is_sequential: bool
     created_at: datetime
     updated_at: datetime
     variants: list[VariantResponse]

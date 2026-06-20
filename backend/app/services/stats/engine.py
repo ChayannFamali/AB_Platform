@@ -22,6 +22,7 @@ from app.services.stats.sample_size import (
     calculate_achieved_mde_conversion,
     calculate_achieved_mde_revenue,
 )
+from app.services.stats.sequential import always_valid_pvalue
 from app.services.stats.srm import SRMResult, check_srm
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,8 @@ class VariantAnalysis:
     denominator_mean: float | None = None         # среднее знаменателя на юзера
     numerator_relative_lift: float | None = None  # относительный lift числителя %
     denominator_relative_lift: float | None = None # относительный lift знаменателя %
+    sequential_fpr: float | None = None            # mSPRT always-valid p-value
+    sequential_boundary_crossed: bool | None = None  # True iff sequential_fpr < alpha
 
 
 @dataclass
@@ -64,6 +67,13 @@ class MetricAnalysis:
     srm: SRMResult
     variants: list[VariantAnalysis] = field(default_factory=list)
     guardrail_violated: bool = False
+
+
+@dataclass
+class ExperimentAnalysis:
+    """Top-level analysis result — metrics + rule-based insights."""
+    metrics: list[MetricAnalysis]
+    insights: list = field(default_factory=list)  # list[Insight] (filled by interpreter)
 
 
 # DB queries 
@@ -246,6 +256,34 @@ def _compute_achieved_mde(
     return None
 
 
+def _maybe_sequential(
+    is_sequential: bool,
+    alpha: float,
+    control_values: list[float] | None,
+    treatment_values: list[float] | None,
+) -> tuple[float | None, bool | None]:
+    """
+    Compute mSPRT always-valid p-value when the experiment is sequential.
+
+    Returns (None, None) for non-sequential experiments, insufficient samples,
+    or any internal failure — sequential is opt-in, never blocks analysis.
+    """
+    if not is_sequential:
+        return None, None
+    if control_values is None or treatment_values is None:
+        return None, None
+    try:
+        result = always_valid_pvalue(
+            control_values, treatment_values, alpha=alpha,
+        )
+    except Exception as e:
+        logger.warning(f"mSPRT расчёт не удался: {e}")
+        return None, None
+    if result is None:
+        return None, None
+    return result.always_valid_pvalue, result.boundary_crossed
+
+
 # Main analysis 
 
 async def run_analysis(
@@ -320,6 +358,23 @@ async def run_analysis(
                     test = z_test_proportions(c_conv, c_total, converted, total)
                     if test:
                         _apply_test_result(va, test)
+
+                    # mSPRT (sequential) — reconstruct Bernoulli arrays.
+                    # For proportion tests each assigned user is modelled as
+                    # a 0/1 draw; identity is irrelevant for the statistic.
+                    if experiment.is_sequential:
+                        ctrl_arr = np.concatenate([
+                            np.ones(c_conv, dtype=float),
+                            np.zeros(max(c_total - c_conv, 0), dtype=float),
+                        ]).tolist()
+                        trt_arr = np.concatenate([
+                            np.ones(converted, dtype=float),
+                            np.zeros(max(total - converted, 0), dtype=float),
+                        ]).tolist()
+                        va.sequential_fpr, va.sequential_boundary_crossed = (
+                            _maybe_sequential(experiment.is_sequential, 0.05,
+                                              ctrl_arr, trt_arr)
+                        )
 
                 metric_analysis.variants.append(va)
 
@@ -431,6 +486,14 @@ async def run_analysis(
                         if test:
                             _apply_test_result(va, test)
 
+                        # mSPRT (sequential) — per-user values feed the
+                        # normal-location mixture statistic directly.
+                        if experiment.is_sequential:
+                            va.sequential_fpr, va.sequential_boundary_crossed = (
+                                _maybe_sequential(experiment.is_sequential, 0.05,
+                                                  ctrl_values, values)
+                            )
+
                     metric_analysis.variants.append(va)
 
         #  MDE post-experiment 
@@ -489,4 +552,12 @@ async def run_analysis(
                 ):
                     va.is_winner = True
 
-    return metric_results
+    #  Rule-based insights (M-007) — runs once on the full metric set.
+    from app.services.stats.interpreter import interpret
+    insights = interpret(
+        metric_results,
+        alpha=0.05,
+        is_sequential=experiment.is_sequential,
+    )
+
+    return ExperimentAnalysis(metrics=metric_results, insights=insights)

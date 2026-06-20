@@ -52,18 +52,28 @@ async def _get_ai_interpretation(
     return await provider.generate(prompt)
 
 
-async def run_and_save(db: AsyncSession, experiment_id: UUID) -> list[MetricAnalysis]:
+async def run_and_save(db: AsyncSession, experiment_id: UUID):
+    """
+    Run analysis, persist results, return the full ExperimentAnalysis
+    (metrics + rule-based insights).
+
+    M-007: persists the new `sequential_fpr` and
+    `sequential_boundary_crossed` columns on `results` so the
+    SequentialPValueChart and CSV export can read them back.
+    """
     from sqlalchemy import select
     from app.models.db import Experiment
+    from app.services.stats.engine import ExperimentAnalysis
 
     exp = await db.execute(select(Experiment).where(Experiment.id == experiment_id))
     experiment = exp.scalar_one_or_none()
     exp_name = experiment.name if experiment else str(experiment_id)
 
-    results = await run_analysis(db, experiment_id)
+    analysis = await run_analysis(db, experiment_id)
+    metric_results: list[MetricAnalysis] = analysis.metrics
 
     rows = []
-    for metric_result in results:
+    for metric_result in metric_results:
         control_va = _find_control(metric_result.variants)
 
         for va in metric_result.variants:
@@ -97,6 +107,8 @@ async def run_and_save(db: AsyncSession, experiment_id: UUID) -> list[MetricAnal
                 "denominator_mean":          va.denominator_mean,
                 "numerator_relative_lift":   va.numerator_relative_lift,
                 "denominator_relative_lift": va.denominator_relative_lift,
+                "sequential_fpr":            va.sequential_fpr,
+                "sequential_boundary_crossed": va.sequential_boundary_crossed,
                 "ai_interpretation":         va.ai_interpretation,
             })
 
@@ -125,6 +137,8 @@ async def run_and_save(db: AsyncSession, experiment_id: UUID) -> list[MetricAnal
                 "denominator_mean":          stmt.excluded.denominator_mean,
                 "numerator_relative_lift":   stmt.excluded.numerator_relative_lift,
                 "denominator_relative_lift": stmt.excluded.denominator_relative_lift,
+                "sequential_fpr":            stmt.excluded.sequential_fpr,
+                "sequential_boundary_crossed": stmt.excluded.sequential_boundary_crossed,
                 "ai_interpretation":         stmt.excluded.ai_interpretation,
             },
         )
@@ -132,7 +146,7 @@ async def run_and_save(db: AsyncSession, experiment_id: UUID) -> list[MetricAnal
         await db.flush()
 
     logger.info(f"Анализ сохранён: experiment={experiment_id}, строк={len(rows)}")
-    return results
+    return analysis
 
 
 # ── CSV export (M-005) ────────────────────────────────────────────────────────
@@ -153,6 +167,8 @@ CSV_COLUMNS = [
     "achieved_mde",
     "srm_detected",
     "srm_p_value",
+    "sequential_fpr",
+    "sequential_boundary_crossed",
 ]
 
 
@@ -212,6 +228,11 @@ async def export_results_csv(db: AsyncSession, experiment_id: UUID) -> str:
             "achieved_mde":   _fmt_float(r.achieved_mde),
             "srm_detected":   bool(srm_detected),
             "srm_p_value":    _fmt_float(srm_p_value),
+            "sequential_fpr": _fmt_float(r.sequential_fpr),
+            "sequential_boundary_crossed": (
+                "" if r.sequential_boundary_crossed is None
+                else bool(r.sequential_boundary_crossed)
+            ),
         })
 
     return buffer.getvalue()

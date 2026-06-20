@@ -54,6 +54,7 @@ class Experiment(Base):
     mutex_group_id      = Column(UUID(as_uuid=True), ForeignKey("mutex_groups.id"), nullable=True)
     started_at          = Column(DateTime, nullable=True)
     ended_at            = Column(DateTime, nullable=True)
+    is_sequential       = Column(Boolean, default=False, nullable=False)
     created_at          = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -187,6 +188,11 @@ class Result(Base):
     numerator_relative_lift   = Column(Float, nullable=True)
     denominator_relative_lift = Column(Float, nullable=True)
 
+    # Sequential testing (M-007) — always-valid p-value at current sample.
+    # NULL for non-sequential experiments.
+    sequential_fpr              = Column(Float,   nullable=True)
+    sequential_boundary_crossed = Column(Boolean, nullable=True)
+
     # AI
     ai_interpretation = Column(Text, nullable=True)
 
@@ -234,6 +240,7 @@ class ResultDaily(Base):
     ci_high        = Column(Float,   nullable=True)
     is_significant = Column(Boolean, nullable=True)
     test_used      = Column(String(50), nullable=True)
+    sequential_fpr = Column(Float,   nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

@@ -41,6 +41,7 @@ const DEFAULT_FORM = {
     { name: 'treatment', traffic_split: 50 },
   ],
   metrics: [{ ...DEFAULT_METRIC }],
+  is_sequential: false,
 }
 
 const isRatioType = (type) => type === 'revenue' || type === 'duration'
@@ -57,6 +58,7 @@ export default function CreateExperimentWizard() {
       { key: 'variants', title: t('wizard.step2') },
       { key: 'metrics',  title: t('wizard.step3') },
       { key: 'review',   title: t('wizard.step4') },
+      { key: 'settings', title: t('wizard.step5') },
     ],
     [t],
   )
@@ -128,6 +130,14 @@ export default function CreateExperimentWizard() {
       )}
       {stepIndex === 3 && (
         <Step4
+          form={form}
+          setForm={setForm}
+          onBack={handleBack}
+          onNext={handleNext}
+        />
+      )}
+      {stepIndex === 4 && (
+        <Step5
           form={form}
           onBack={handleBack}
           onNext={handleNext}
@@ -482,9 +492,53 @@ function Step3({ form, setForm, onBack, onNext, isNextDisabled, error }) {
   )
 }
 
-// ── Step 4: Review ─────────────────────────────────────────────────────────
+// ── Step 4: Settings (M-007) ─────────────────────────────────────────────
 
-function Step4({ form, onBack, onNext, isSubmitting }) {
+function Step4({ form, setForm, onBack, onNext }) {
+  const { t } = useTranslation()
+  return (
+    <WizardStep
+      title={t('wizard.settings.title')}
+      description={t('wizard.settings.description')}
+      onBack={onBack}
+      onNext={onNext}
+    >
+      <Card>
+        <CardContent className="space-y-6 pt-4">
+          <label className="flex items-start gap-3">
+            <Checkbox
+              checked={form.is_sequential}
+              onCheckedChange={(checked) =>
+                setForm({ ...form, is_sequential: !!checked })
+              }
+            />
+            <div className="space-y-1">
+              <div className="text-sm font-medium">
+                {t('wizard.settings.sequential')}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t('wizard.settings.sequentialHelp')}
+              </p>
+            </div>
+          </label>
+
+          <div className="rounded-md border border-dashed bg-muted/40 p-3">
+            <div className="text-sm font-medium">
+              {t('wizard.settings.holdout')}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t('wizard.settings.holdoutHelp')}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </WizardStep>
+  )
+}
+
+// ── Step 5: Review ─────────────────────────────────────────────────────────
+
+function Step5({ form, onBack, onNext, isSubmitting }) {
   const { t } = useTranslation()
   return (
     <WizardStep
@@ -513,6 +567,20 @@ function Step4({ form, onBack, onNext, isSubmitting }) {
             <Row
               label={t('experiments.create.trafficPercentage')}
               value={`${form.traffic_percentage}%`}
+            />
+            <Row
+              label={t('experiments.detail.sequential')}
+              value={
+                form.is_sequential ? (
+                  <Badge variant="info">
+                    {t('experiments.detail.sequentialOn')}
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {t('experiments.detail.sequentialOff')}
+                  </span>
+                )
+              }
             />
           </CardContent>
         </Card>
@@ -651,6 +719,7 @@ function submitForm(form) {
     name: form.name,
     description: form.description || null,
     traffic_percentage: Number(form.traffic_percentage),
+    is_sequential: !!form.is_sequential,
     variants: form.variants.map((v) => ({
       name: v.name,
       traffic_split: Number(v.traffic_split),

@@ -48,6 +48,20 @@ export default function ExperimentSettingsTab({ experiment }) {
               )
             }
           />
+          <Row
+            label={t('experiments.detail.sequential')}
+            value={
+              experiment.is_sequential ? (
+                <Badge variant="info">
+                  {t('experiments.detail.sequentialOn')}
+                </Badge>
+              ) : (
+                <span className="text-muted-foreground">
+                  {t('experiments.detail.sequentialOff')}
+                </span>
+              )
+            }
+          />
         </CardContent>
       </Card>
 
