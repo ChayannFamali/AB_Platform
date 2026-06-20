@@ -150,11 +150,25 @@ async def clean_redis(redis_client):
 
 # ── Per-test isolation ────────────────────────────────────────────────────────
 
+# Standard roles + permissions seeded per test (mirrors migration 0006_rbac).
+# Kept in sync with backend/app/services/rbac_service.py::ROLE_PERMISSIONS.
+_STANDARD_ROLES = [
+    ("admin",   "Administrator",       "Full access"),
+    ("editor",  "Editor",              "Can create and modify experiments"),
+    ("analyst", "Analyst",             "Read-only plus analysis"),
+    ("viewer",  "Viewer",              "Read-only"),
+]
+from app.services.rbac_service import ROLE_PERMISSIONS  # noqa: E402
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def clean_tables() -> None:
     """
-    Truncate all tables BEFORE each test.
-    Uses direct asyncpg connection to avoid SQLAlchemy transaction conflicts.
+    Truncate all tables BEFORE each test, then re-seed the 4 standard roles
+    so first-user registration in M-003 tests still assigns admin. We can't
+    rely on migration seed because earlier tests in the session may have
+    added custom roles that would break later assertions on
+    `len(roles) == 4`.
     """
     conn = await asyncpg.connect(
         host=settings.postgres_host,
@@ -168,6 +182,9 @@ async def clean_tables() -> None:
                 api_keys,
                 users,
                 user_roles,
+                role_permissions,
+                roles,
+                audit_log,
                 results_daily,
                 results,
                 events,
@@ -178,6 +195,19 @@ async def clean_tables() -> None:
                 mutex_groups
             CASCADE
         """)
+        # Re-seed standard roles + their permission sets.
+        for key, name, description in _STANDARD_ROLES:
+            role_id = await conn.fetchval(
+                "INSERT INTO roles (id, key, name, description, created_at) "
+                "VALUES (gen_random_uuid(), $1, $2, $3, now()) RETURNING id",
+                key, name, description,
+            )
+            for perm in ROLE_PERMISSIONS[key]:
+                await conn.execute(
+                    "INSERT INTO role_permissions (role_id, permission) "
+                    "VALUES ($1, $2)",
+                    role_id, perm,
+                )
     finally:
         await conn.close()
 

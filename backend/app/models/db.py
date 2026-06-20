@@ -353,3 +353,45 @@ class UserRole(Base):
     __table_args__ = (
         Index("idx_user_roles_role_id", "role_id"),
     )
+
+
+# Audit Log ───────────────────────────────────────────────────────────
+#
+# M-004: Append-only audit trail for administrative mutations
+# (role/user changes in this phase; experiment/analyze hooks in later
+# tasks). Read-only via GET /api/v1/audit (requires audit:read).
+#
+# Schema choices:
+# - `action` is a free-form string (e.g. 'create', 'update', 'delete',
+#   'assign', 'revoke', 'toggle_active') — keeps the model flexible
+#   without a SQL ENUM that requires migrations to add new actions.
+# - `resource_type` + `resource_id` identify the affected entity;
+#   `details` (JSONB) holds context-specific extras (e.g.
+#   `{"role_key": "admin", "is_active": true}`). Named `details` instead
+#   of `metadata` because `metadata` is reserved by SQLAlchemy's
+#   Declarative API on every Base subclass.
+# - No `old_value` / `new_value` full snapshots — kept minimal per the
+#   M-004 design decision. Most admin actions are discoverable from the
+#   current state + details.
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id       = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action        = Column(String(50), nullable=False)
+    resource_type = Column(String(50), nullable=False)
+    resource_id   = Column(UUID(as_uuid=True), nullable=True)
+    details       = Column(JSONB, nullable=True)
+    ip_address    = Column(String(64), nullable=True)
+    user_agent    = Column(Text, nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_audit_log_created_at",    "created_at"),
+        Index("ix_audit_log_user_id",       "user_id"),
+        Index("ix_audit_log_resource_type", "resource_type"),
+        Index("ix_audit_log_action",        "action"),
+    )

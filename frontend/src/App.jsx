@@ -23,11 +23,13 @@ import { Toaster } from './components/ui/toaster'
 import PageContainer from './components/PageContainer'
 
 import ApiKeysPage from './pages/ApiKeysPage'
+import AuditLogPage from './pages/AuditLogPage'
 import CreateExperiment from './pages/CreateExperiment'
 import ExperimentList from './pages/ExperimentList'
 import ExperimentResults from './pages/ExperimentResults'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import UsersPage from './pages/UsersPage'
 
 function ProtectedRoute({ children }) {
   const isAuthenticated = useAuthStore((s) => Boolean(s.user && s.token))
@@ -77,6 +79,22 @@ export default function App() {
             >
               {t('apiKeys.title')}
             </Link>
+            {Array.isArray(roles) && roles.includes('admin') && (
+              <>
+                <Link
+                  to="/settings/users"
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  {t('users.title')}
+                </Link>
+                <Link
+                  to="/settings/audit"
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  {t('audit.title')}
+                </Link>
+              </>
+            )}
 
             <div className="ml-auto flex items-center gap-3">
               <DropdownMenu>
@@ -162,6 +180,26 @@ export default function App() {
                 <ProtectedRoute>
                   <PageContainer>
                     <ApiKeysPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/users"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <UsersPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/audit"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <AuditLogPage />
                   </PageContainer>
                 </ProtectedRoute>
               }

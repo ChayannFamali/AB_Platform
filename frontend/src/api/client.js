@@ -50,3 +50,15 @@ export const getDailyResults = (id) =>
 // ─── Sample Size ──────────────────────────────────────────────────────────────
 export const getSampleSizeConversion = (p) =>
   api.get('/api/v1/stats/sample-size/conversion', { params: p })
+
+// ─── Users & Roles (M-003) + Audit Log (M-004) ───────────────────────────────
+export const getUsers       = (params = {}) => api.get('/api/v1/users',   { params })
+export const getRoles       = ()              => api.get('/api/v1/roles')
+export const assignRole     = (userId, roleId) =>
+  api.post(`/api/v1/users/${userId}/roles`, { role_id: roleId })
+export const revokeRole     = (userId, roleId) =>
+  api.delete(`/api/v1/users/${userId}/roles/${roleId}`)
+export const updateUserActive = (userId, isActive) =>
+  api.patch(`/api/v1/users/${userId}`, { is_active: isActive })
+
+export const getAuditLog    = (params = {}) => api.get('/api/v1/audit', { params })

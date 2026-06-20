@@ -3,6 +3,27 @@
 ## [Unreleased]
 
 ### Added
+- M-004: Audit log + Users & Audit pages — `AuditLog` model (append-only,
+  `id` / `user_id` / `action` / `resource_type` / `resource_id` /
+  `details` JSONB / `ip_address` / `user_agent` / `created_at`);
+  migration `0007_audit_log` (`down_revision = "0014_api_key_scopes"`,
+  creates `audit_log` with 4 indexes on `created_at` / `user_id` /
+  `resource_type` / `action`); `app/services/audit_service.py`
+  (`log_action(actor, action, resource_type, resource_id, details, request)`
+  + `list_audit_entries(limit, offset, resource_type, user_id, action)` —
+  IP/UA extracted from `Request`, eager-loads `user` to avoid N+1);
+  `app/schemas/audit.py` (`AuditLogEntry` with `details` instead of
+  `metadata` because the latter is reserved by SQLAlchemy's Declarative
+  API); `app/routers/audit.py` (`GET /api/v1/audit`, paginated,
+  filterable, requires `audit:read`); audit hooks on all five
+  role/user mutations (`POST /roles`, `PATCH /roles/{id}`,
+  `PATCH /users/{id}`, `POST /users/{id}/roles`,
+  `DELETE /users/{id}/roles/{role_id}`); `UsersPage` at
+  `/settings/users` with role assign/revoke dialog and is_active toggle;
+  `AuditLogPage` at `/settings/audit` with resource_type / action
+  filters; API client additions (`getUsers`, `getRoles`, `assignRole`,
+  `revokeRole`, `updateUserActive`, `getAuditLog`); nav links (admin
+  only); i18n keys for both pages (ru + en).
 - M-002: Frontend testing setup — Vitest 2.x + React Testing Library 16 +
   jsdom 25 + @vitest/coverage-v8; `npm test` / `npm run test:run` /
   `npm run test:coverage` / `npm run test:watch` / `npm run test:ui`
@@ -38,6 +59,11 @@
   accepts a `scopes` list and `ApiKeyResponse` returns it.
 
 ### Changed
+- `tests/conftest.py` (M-004): `clean_tables` now TRUNCATEs `roles` +
+  `role_permissions` and re-seeds the four standard roles + their
+  permission sets per test (imported from `rbac_service.ROLE_PERMISSIONS`).
+  Previously roles accumulated across tests, eventually breaking
+  `test_admin_can_list_roles` assertions on `len(roles) == 4`.
 - All existing pages refactored (M-001): `useState`+`useEffect` for server data
   replaced with `useQuery`/`useMutation`; hardcoded Russian strings replaced
   with `t()` keys; hand-written CSS classes replaced with Tailwind utilities.
@@ -76,6 +102,12 @@
   feature-specific tests are added in M-005+ (TESTING_STRATEGY.md
   target is 70% overall).
 - M-003 tests: 72 passed, 0 failed (`pytest tests/ -v`).
+- M-004 backend tests: 9 audit tests pass; full backend suite
+  81 passed, 0 failed (`pytest tests/ -v`).
+- M-004 frontend tests: 33 passed, 0 failed across 12 test files
+  (`npm run test:run`) — added 4 new smoke tests (2 per page).
+- M-004 migration verified: `alembic upgrade head` and `downgrade -1`
+  both run cleanly.
 - M-003 migration verified: `alembic upgrade head` and `downgrade -1` both run
   cleanly on the test database.
 - The legacy `users.is_admin` column is retained as a deprecated read-only field
