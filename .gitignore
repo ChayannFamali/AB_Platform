@@ -1,34 +1,79 @@
-# Python
+# ── Python ────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .venv/
 venv/
+env/
+ENV/
+backend/.venv/
 dist/
+build/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+*.so
 
-# Environment
-.env
-*.env
-
-# Node
+# ── Node / frontend ───────────────────────────────────────────────────────
 node_modules/
 frontend/dist/
 frontend/build/
 sdk/js/node_modules/
+frontend/coverage/
 
-# Docker
+# ── Environment files ─────────────────────────────────────────────────────
+.env
+.env.*
+*.env
+!.env.example
+
+# ── Docker ────────────────────────────────────────────────────────────────
 *.log
+*.pid
+docker-compose.override.yml
 
-# VS Code
+# ── IDE / editor ──────────────────────────────────────────────────────────
 .vscode/
-
-# OS
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
 
-# Test coverage
+# ── Local AI / agent artifacts (NOT for the public repo) ──────────────────
+.qwen/
+.qwenignore
+.continue/
+.cursor/
+.aider*
+.cline/
+
+# ── Internal agent instructions (development-only, not user-facing) ───────
+# These files guide the AI agent that built the project; they are not part
+# of the product. The product's user-facing documentation is README.md.
+instruction/
+1.txt
+CHANGELOG.md
+
+# ── Test coverage ──────────────────────────────────────────────────────────
 .coverage
+.coverage.*
 htmlcov/
-frontend/coverage/
+coverage.xml
+*.cover
+
+# ── Misc build artefacts ───────────────────────────────────────────────────
+*.bak
+*.tmp
+*.orig
+*.rej
+.turbo/
+.cache/
+
+# ── Local DB / runtime state (should never be committed) ──────────────────
+*.sqlite
+*.sqlite3
+*.db
+docker-data/
