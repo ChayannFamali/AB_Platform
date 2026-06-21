@@ -54,7 +54,6 @@ Thumbs.db
 # These files guide the AI agent that built the project; they are not part
 # of the product. The product's user-facing documentation is README.md.
 instruction/
-1.txt
 CHANGELOG.md
 
 # ── Test coverage ──────────────────────────────────────────────────────────
