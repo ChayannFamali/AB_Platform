@@ -39,6 +39,7 @@ import SegmentBuilderPage from './pages/SegmentBuilderPage'
 import SegmentListPage from './pages/SegmentListPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
+import WebhookSettingsPage from './pages/WebhookSettingsPage'
 
 function ProtectedRoute({ children }) {
   const isAuthenticated = useAuthStore((s) => Boolean(s.user && s.token))
@@ -269,6 +270,16 @@ export default function App() {
                 <ProtectedRoute>
                   <PageContainer>
                     <AuditLogPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/webhooks"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <WebhookSettingsPage />
                   </PageContainer>
                 </ProtectedRoute>
               }

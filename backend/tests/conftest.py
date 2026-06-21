@@ -202,7 +202,9 @@ async def clean_tables() -> None:
                 holdout_groups,
                 guardrail_configs,
                 custom_metrics,
-                decisions
+                decisions,
+                webhook_deliveries,
+                webhooks
             CASCADE
         """)
         # Re-seed standard roles + their permission sets.

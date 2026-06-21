@@ -165,6 +165,12 @@ async def run_and_save(db: AsyncSession, experiment_id: UUID):
     # next poll/manual Analyze will pick up the changes anyway.
     await _publish_sse_events(experiment_id, metric_results, analysis.insights)
 
+    # ── Webhook fan-out (M-013) ────────────────────────────────────────
+    # Same insight-driven events that fire over SSE also get enqueued
+    # for delivery to subscribed webhooks. Done after SSE so any Redis
+    # hiccup doesn't block SSE; the worker handles retries separately.
+    await _enqueue_webhooks(experiment_id, metric_results, analysis.insights)
+
     return analysis
 
 
@@ -333,3 +339,87 @@ def _fmt_float(value: float | None) -> str:
         return ""
     # Full precision — analysis numbers are already small floats.
     return f"{value:.6f}"
+
+
+# ── Webhook enqueue (M-013) ────────────────────────────────────────────────
+
+# Same insight-type constants the SSE publisher uses — kept locally so
+# the import graph stays one-directional.
+_WEBHOOK_INSIGHT_WINNER         = "clear_winner"
+_WEBHOOK_INSIGHT_GUARDRAIL      = "guardrail_violated"
+_WEBHOOK_INSIGHT_SEQ_BOUNDARY   = "sequential_boundary"
+
+
+async def _enqueue_webhooks(
+    experiment_id: UUID,
+    metric_results: list[MetricAnalysis],
+    insights: list,
+) -> None:
+    """
+    Enqueue arq `deliver_webhooks` jobs for each insight-driven event
+    that should fan out to subscribed webhooks.
+
+    Same events as SSE (`winner_detected`, `guardrail_violated`,
+    `sequential_boundary_crossed`) plus `srm_alert` (experiment-wide).
+    The actual delivery + retry happens in `app.worker.deliver_webhooks`
+    so analysis never blocks on HTTP timeouts.
+
+    Enqueue errors (Redis down, etc.) are logged and swallowed — the
+    next analysis cycle will re-fire the same event if conditions
+    persist.
+    """
+    from arq.connections import RedisSettings, create_pool
+
+    from app.config import settings
+
+    events: list[tuple[str, dict]] = []
+
+    # SRM is per-metric but we only emit one event per analysis, with
+    # the worst (lowest) p_value.
+    srm_metrics = [m for m in metric_results if m.srm.srm_detected]
+    if srm_metrics:
+        worst = min(srm_metrics, key=lambda m: m.srm.p_value or 1.0)
+        events.append((
+            "srm_alert",
+            {
+                "experiment_id": str(experiment_id),
+                "p_value":       worst.srm.p_value,
+            },
+        ))
+
+    for insight in insights:
+        ins_type = getattr(insight, "type", "")
+        payload = {
+            "experiment_id": str(experiment_id),
+            "metric_id":     getattr(insight, "metric_id", None),
+            "variant_id":    getattr(insight, "variant_id", None),
+        }
+        for k, v in (getattr(insight, "params", None) or {}).items():
+            payload.setdefault(k, v)
+
+        if ins_type == _WEBHOOK_INSIGHT_WINNER:
+            events.append(("winner_detected", payload))
+        elif ins_type == _WEBHOOK_INSIGHT_GUARDRAIL:
+            events.append(("guardrail_violated", payload))
+        elif ins_type == _WEBHOOK_INSIGHT_SEQ_BOUNDARY:
+            events.append(("sequential_boundary_crossed", payload))
+
+    if not events:
+        return
+
+    try:
+        redis = await create_pool(
+            RedisSettings.from_dsn(settings.redis_url)
+        )
+        try:
+            for event_type, payload in events:
+                await redis.enqueue_job(
+                    "deliver_webhooks", event_type, payload,
+                )
+        finally:
+            await redis.aclose()
+    except Exception as e:
+        logger.warning(
+            "webhook_enqueue_skipped experiment=%s error=%s",
+            str(experiment_id), str(e),
+        )

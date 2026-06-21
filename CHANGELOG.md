@@ -3,6 +3,32 @@
 ## [Unreleased]
 
 ### Added
+- M-013: outbound webhooks — `webhooks` + `webhook_deliveries` tables,
+  HMAC-SHA256 signing, format adapters (generic JSON / Slack /
+  Discord), 3-attempt exponential-backoff retry with per-attempt
+  audit row, synchronous test send. Endpoints:
+  `GET/POST /api/v1/webhooks`, `GET/PATCH/DELETE
+  /api/v1/webhooks/{id}`, `POST /api/v1/webhooks/{id}/test`,
+  `GET /api/v1/webhooks/{id}/deliveries`. RBAC: `webhooks:manage`.
+  Subscribed events: `winner_detected`, `srm_alert`,
+  `guardrail_violated`, `sequential_boundary_crossed`. Secret is
+  returned ONCE on create; subsequent reads expose only
+  `has_secret: bool`. The analysis_service now enqueues a
+  `deliver_webhooks` arq task for each insight-driven event after
+  the SSE fan-out, so webhook delivery never blocks the analysis
+  pipeline. Schema migration `0017_webhooks`.
+- M-013: worker task `deliver_webhooks(event_type, payload)` —
+  loads all active webhooks subscribed to the event, runs the retry
+  loop per webhook (2s + 4s backoff), persists one
+  `WebhookDelivery` row per attempt with status_code / response_body
+  / attempt / success / duration_ms.
+- M-013: frontend — `/settings/webhooks` page with list, create,
+  edit, delete, test, and an inline per-webhook delivery log
+  (filtered by success/failed). New "Webhooks" link in
+  `/settings`. `WebhookForm` covers name, URL, format selector,
+  HMAC secret, event checkboxes, and an active toggle. The plain
+  secret is shown ONCE in a dedicated dialog after create. i18n
+  keys in both `en.json` and `ru.json`.
 - M-012: decision log — append-only per-experiment history of
   ship / stop / iterate / inconclusive decisions. Each entry
   carries `status`, an optional free-form `comment`, the acting
@@ -57,6 +83,41 @@
   "iterate", "inconclusive") are validated at the Pydantic layer
   via `Literal[...]`. VARCHAR keeps the downgrade symmetric
   (no enum type to drop) and the wire-format stable.
+
+### Notes
+- M-013 backend tests: 20 new tests in `test_m013_webhooks.py` —
+  CRUD + secret-mask (`get_webhook` never returns the secret),
+  RBAC (viewer blocked), pure `sign_payload` stability /
+  body-sensitivity / secret-sensitivity, `format_payload` shape
+  for generic / slack / discord, `send_with_retries` writes one
+  WebhookDelivery row per attempt (success on attempt 3 after two
+  500s; all-three-500s gives up but logs every attempt), and
+  `send_test` is single-shot. The combined run
+  (`pytest tests/test_m011_custom_metrics_guardrails.py
+  tests/test_m012_decisions.py tests/test_m013_webhooks.py
+  tests/test_integration.py -q`) → **103 passed** in 60 s.
+- M-013 frontend tests: 5 new tests (3 in WebhookForm.test.jsx,
+  2 in WebhookSettingsPage.test.jsx). Full frontend suite
+  **102 passed** across 35 test files (`npm test -- --run`).
+- M-013 frontend lint: clean (`npm run lint`). Production build:
+  `npm run build` succeeds (1094 KB JS / 320 KB gzipped — +16 KB
+  on top of the M-012 baseline for WebhookSettingsPage +
+  WebhookForm + WebhookDeliveryLog + extended App.jsx + SettingsPage).
+- M-013 retry semantics: `MAX_ATTEMPTS = 3` (one initial + two
+  retries). Backoff: `[0s, 2s, 4s]` — the first attempt is
+  immediate, retries sleep before firing. Each attempt is
+  persisted to `webhook_deliveries` BEFORE the next sleep, so
+  the log reflects every attempt even if the worker dies
+  mid-retry.
+- M-013 secret handling: `WebhookCreate` returns
+  `WebhookWithSecretResponse` (with the plain `secret`) so the
+  operator can copy it. `WebhookResponse` (used everywhere else)
+  omits the field entirely and exposes `has_secret: bool` instead.
+  PATCH with `secret=""` clears the secret (set to NULL).
+- M-013 HTTP client: `send_with_retries` uses `httpx.AsyncClient`
+  with a 10s per-attempt timeout. The retry test patches the
+  service-level `_send_one` so no real network calls are made
+  during the test suite (CI-friendly).
 - M-011: custom metrics subsystem — global, reusable metric templates
   (event + aggregation + AND-combined property filters + optional
   denominator for ratio metrics) snapshotted into per-experiment

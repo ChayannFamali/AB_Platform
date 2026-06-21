@@ -250,3 +250,30 @@ export const addDecision = (experimentId, data) =>
   api
     .post(`/api/v1/experiments/${experimentId}/decisions`, data)
     .then((r) => r.data)
+
+// ─── Webhooks (M-013) ──────────────────────────────────────────────────────
+// Outbound webhooks for experiment signals (winner_detected, srm_alert,
+// guardrail_violated, sequential_boundary_crossed). `createWebhook`
+// returns the plain secret ONCE — subsequent reads only expose
+// `has_secret: bool`. The "Test" button does a synchronous send and
+// returns status/duration without touching the retry log.
+export const getWebhooks = (params = {}) =>
+  api.get('/api/v1/webhooks', { params }).then((r) => r.data)
+
+export const getWebhook = (id) =>
+  api.get(`/api/v1/webhooks/${id}`).then((r) => r.data)
+
+export const createWebhook = (data) =>
+  api.post('/api/v1/webhooks', data).then((r) => r.data)
+
+export const updateWebhook = (id, data) =>
+  api.patch(`/api/v1/webhooks/${id}`, data).then((r) => r.data)
+
+export const deleteWebhook = (id) =>
+  api.delete(`/api/v1/webhooks/${id}`).then((r) => r.data)
+
+export const testWebhook = (id) =>
+  api.post(`/api/v1/webhooks/${id}/test`).then((r) => r.data)
+
+export const getWebhookDeliveries = (id, params = {}) =>
+  api.get(`/api/v1/webhooks/${id}/deliveries`, { params }).then((r) => r.data)

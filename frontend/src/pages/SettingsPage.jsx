@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronRight, Languages, Moon, Shield, ScrollText, Users } from 'lucide-react'
+import { ChevronRight, Languages, Moon, Shield, ScrollText, Users, Webhook } from 'lucide-react'
 
 import { useAuthStore } from '../stores/authStore'
 import { useUiStore } from '../stores/uiStore'
@@ -87,6 +87,12 @@ export default function SettingsPage() {
               icon={ScrollText}
               title={t('audit.title')}
               description={t('audit.subtitle')}
+            />
+            <SettingsLink
+              to="/settings/webhooks"
+              icon={Webhook}
+              title={t('webhooks.title')}
+              description={t('webhooks.settingsHint')}
             />
             {isAdmin && (
               <SettingsLink

@@ -15,7 +15,30 @@ from app.services.partition_manager import ensure_partitions
 logger = logging.getLogger(__name__)
 
 
-# Jobs 
+# Jobs
+
+async def deliver_webhooks(
+    ctx: dict,
+    event_type: str,
+    payload: dict,
+) -> dict:
+    """
+    M-013: fan out one event-type/payload pair to every active webhook
+    subscribed to `event_type`. Runs as a background arq task so the
+    analysis pipeline doesn't block on HTTP timeouts.
+
+    Args:
+        event_type: "winner_detected" | "srm_alert" |
+                    "guardrail_violated" | "sequential_boundary_crossed"
+        payload:    JSON-serialisable dict. The webhook_service
+                    formatter decides what to surface as headline vs.
+                    structured fields based on `format`.
+    """
+    from app.services.webhook_service import deliver_event
+    async with AsyncSessionLocal() as db:
+        count = await deliver_event(db, event_type, payload)
+    return {"event_type": event_type, "fanned_out": count}
+
 
 async def analyze_running_experiments(ctx: dict) -> dict:
     """
@@ -153,6 +176,7 @@ class WorkerSettings:
         analyze_single_experiment,
         snapshot_daily_results,
         create_monthly_partitions,
+        deliver_webhooks,
     ]
 
     redis_settings = RedisSettings.from_dsn(settings.redis_url)

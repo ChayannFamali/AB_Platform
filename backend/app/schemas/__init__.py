@@ -69,6 +69,21 @@ from app.schemas.decision import (
     PaginatedDecisions,
 )
 
+# Webhook schemas (M-013)
+from app.schemas.webhook import (
+    PaginatedWebhookDeliveries,
+    PaginatedWebhooks,
+    WebhookCreate,
+    WebhookDeliveryResponse,
+    WebhookEvent,
+    WebhookFormat,
+    WebhookListItem,
+    WebhookResponse,
+    WebhookTestResponse,
+    WebhookUpdate,
+    WebhookWithSecretResponse,
+)
+
 # Result schemas
 from app.schemas.result import (
     AnalysisResponse,
@@ -217,6 +232,18 @@ __all__ = [
     "DecisionResponse",
     "DecisionStatus",
     "PaginatedDecisions",
+    # Webhook (M-013)
+    "PaginatedWebhookDeliveries",
+    "PaginatedWebhooks",
+    "WebhookCreate",
+    "WebhookDeliveryResponse",
+    "WebhookEvent",
+    "WebhookFormat",
+    "WebhookListItem",
+    "WebhookResponse",
+    "WebhookTestResponse",
+    "WebhookUpdate",
+    "WebhookWithSecretResponse",
     # Enums
     "ExperimentStatus",
     "MetricType",

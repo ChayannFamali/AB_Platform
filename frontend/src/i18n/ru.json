@@ -301,6 +301,58 @@
     "record": "Записать",
     "recorded": "Решение записано"
   },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "Исходящие webhooks для сигналов эксперимента (winner_detected, srm_alert, guardrail_violated, sequential_boundary_crossed).",
+    "settingsHint": "Настройте получателей оповещений об экспериментах — Slack, Discord или произвольный URL.",
+    "new": "Новый webhook",
+    "newTitle": "Новый webhook",
+    "editTitle": "Редактировать webhook",
+    "name": "Название",
+    "namePlaceholder": "Slack #experiments",
+    "url": "URL",
+    "urlError": "URL должен начинаться с http:// или https://",
+    "format": "Формат",
+    "secret": "Секрет (HMAC-SHA256)",
+    "secretHelp": "Используется для подписи заголовка X-Signature-SHA256. Оставьте пустым, если подпись не нужна.",
+    "events": "События",
+    "eventsCount": "событий",
+    "eventNames": {
+      "winner_detected": "Победитель определён",
+      "srm_alert": "Sample Ratio Mismatch",
+      "guardrail_violated": "Guardrail нарушен",
+      "sequential_boundary_crossed": "Sequential граница пересечена"
+    },
+    "formats": {
+      "generic": "Generic JSON",
+      "slack": "Slack",
+      "discord": "Discord"
+    },
+    "isActive": "Активен",
+    "paused": "На паузе",
+    "empty": "Webhooks ещё не созданы",
+    "emptyHint": "Создайте первый webhook, чтобы получать оповещения об экспериментах в Slack, Discord или на произвольный HTTPS endpoint.",
+    "created": "Webhook создан",
+    "updated": "Webhook обновлён",
+    "deleted": "Webhook удалён",
+    "deleteConfirmTitle": "Удалить webhook?",
+    "deleteConfirm": "Удалить webhook «{{name}}»? Это действие необратимо.",
+    "test": "Отправить тестовый payload",
+    "testResult": "Результат теста: HTTP {{status}} за {{duration}} мс",
+    "secretRevealTitle": "Сохраните секрет",
+    "secretRevealHint": "Секрет показывается ОДИН раз. Скопируйте его в получатель, чтобы он мог проверить заголовок X-Signature-SHA256.",
+    "secretSaved": "Сохранил",
+    "success": "Успех",
+    "failed": "Ошибка",
+    "deliveryLogTitle": "Недавние доставки",
+    "deliveryFilter": {
+      "all": "Все",
+      "success": "Успех",
+      "failed": "Ошибки"
+    },
+    "deliveriesEmpty": "Доставок ещё нет",
+    "deliveriesEmptyHint": "Доставки появятся после первого запуска анализа, который триггернет подписанное событие."
+  },
   "sampleSize": {
     "title": "Калькулятор размера выборки",
     "navTitle": "Размер выборки",

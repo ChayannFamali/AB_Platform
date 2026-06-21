@@ -301,6 +301,58 @@
     "record": "Record",
     "recorded": "Decision recorded"
   },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "Outbound webhooks for experiment signals (winner_detected, srm_alert, guardrail_violated, sequential_boundary_crossed).",
+    "settingsHint": "Configure destinations for experiment alerts — Slack, Discord, or a custom URL.",
+    "new": "New webhook",
+    "newTitle": "New webhook",
+    "editTitle": "Edit webhook",
+    "name": "Name",
+    "namePlaceholder": "Slack #experiments",
+    "url": "URL",
+    "urlError": "URL must start with http:// or https://",
+    "format": "Format",
+    "secret": "Secret (HMAC-SHA256)",
+    "secretHelp": "Used to sign the X-Signature-SHA256 header. Leave blank to send unsigned requests.",
+    "events": "Events",
+    "eventsCount": "events",
+    "eventNames": {
+      "winner_detected": "Winner detected",
+      "srm_alert": "Sample Ratio Mismatch",
+      "guardrail_violated": "Guardrail violated",
+      "sequential_boundary_crossed": "Sequential boundary crossed"
+    },
+    "formats": {
+      "generic": "Generic JSON",
+      "slack": "Slack",
+      "discord": "Discord"
+    },
+    "isActive": "Active",
+    "paused": "Paused",
+    "empty": "No webhooks yet",
+    "emptyHint": "Create your first webhook to receive experiment alerts in Slack, Discord, or any HTTPS endpoint.",
+    "created": "Webhook created",
+    "updated": "Webhook updated",
+    "deleted": "Webhook deleted",
+    "deleteConfirmTitle": "Delete webhook?",
+    "deleteConfirm": "Delete webhook «{{name}}»? This cannot be undone.",
+    "test": "Send test payload",
+    "testResult": "Test result: HTTP {{status}} in {{duration}} ms",
+    "secretRevealTitle": "Save the secret now",
+    "secretRevealHint": "The secret is shown ONCE. Copy it into your receiver so it can verify the X-Signature-SHA256 header.",
+    "secretSaved": "I've saved it",
+    "success": "Success",
+    "failed": "Failed",
+    "deliveryLogTitle": "Recent deliveries",
+    "deliveryFilter": {
+      "all": "All",
+      "success": "Success",
+      "failed": "Failed"
+    },
+    "deliveriesEmpty": "No deliveries yet",
+    "deliveriesEmptyHint": "Deliveries appear here after your first analysis run that triggers a subscribed event."
+  },
   "sampleSize": {
     "title": "Sample size calculator",
     "navTitle": "Sample size",

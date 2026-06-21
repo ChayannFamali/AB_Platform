@@ -837,3 +837,80 @@ class Decision(Base):
         Index("ix_decisions_experiment_id", "experiment_id"),
         Index("ix_decisions_decided_at",    "decided_at"),
     )
+
+
+# Webhooks ───────────────────────────────────────────────────────────
+#
+# M-013: outbound webhooks for experiment signals. A `Webhook` row
+# carries the destination URL, the set of subscribed events, an
+# optional HMAC-SHA256 secret, and a payload format (generic / slack /
+# discord). The `is_active` flag lets admins keep the config in
+# place but pause deliveries without deleting it.
+#
+# `webhook_deliveries` is the append-only audit trail of every
+# attempt: status_code, response_body (truncated), attempt number,
+# success flag, and duration. Useful for debugging "why didn't my
+# Slack notification fire?" and for back-pressure / abuse review.
+#
+# Subscribed events:
+#   - winner_detected
+#   - srm_alert
+#   - guardrail_violated
+#   - sequential_boundary_crossed
+
+
+class Webhook(Base):
+    __tablename__ = "webhooks"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name       = Column(String(255), nullable=False)
+    url        = Column(Text, nullable=False)
+    # JSONB list of event-type strings the webhook subscribes to.
+    events     = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    # Optional HMAC-SHA256 secret. NULL → no signature header sent.
+    # Never returned in GET responses.
+    secret     = Column(String(255), nullable=True)
+    # "generic" | "slack" | "discord".
+    format     = Column(String(20), nullable=False, server_default=text("'generic'"))
+    is_active  = Column(Boolean, nullable=False, server_default=text("true"))
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    deliveries      = relationship(
+        "WebhookDelivery",
+        back_populates="webhook",
+        cascade="all, delete-orphan",
+        order_by="WebhookDelivery.created_at.desc()",
+    )
+    created_by_user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_webhooks_is_active", "is_active"),
+    )
+
+
+class WebhookDelivery(Base):
+    __tablename__ = "webhook_deliveries"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    webhook_id    = Column(UUID(as_uuid=True), ForeignKey("webhooks.id", ondelete="CASCADE"), nullable=False)
+    event_type    = Column(String(50), nullable=False)
+    # Stored payload (post-formatting) so the delivery log shows what
+    # was actually sent (handy when format=slack vs generic differ).
+    payload       = Column(JSONB, nullable=False)
+    status_code   = Column(Integer, nullable=True)
+    response_body = Column(Text, nullable=True)
+    # 1, 2, 3 — incremented on each retry. Successful delivery can
+    # happen on any attempt.
+    attempt       = Column(Integer, nullable=False, server_default=text("1"))
+    success       = Column(Boolean, nullable=False, server_default=text("false"))
+    duration_ms   = Column(Integer, nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    webhook = relationship("Webhook", back_populates="deliveries")
+
+    __table_args__ = (
+        Index("ix_webhook_deliveries_webhook_id", "webhook_id"),
+        Index("ix_webhook_deliveries_created_at", "created_at"),
+    )
