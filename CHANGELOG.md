@@ -3,6 +3,60 @@
 ## [Unreleased]
 
 ### Added
+- M-012: decision log — append-only per-experiment history of
+  ship / stop / iterate / inconclusive decisions. Each entry
+  carries `status`, an optional free-form `comment`, the acting
+  user, and a timestamp. The experiment's `decision_status` column
+  is denormalised to the latest decision's status so list / detail
+  reads don't need a JOIN. Endpoints nested under the experiment:
+  `GET /api/v1/experiments/{id}/decisions`,
+  `POST /api/v1/experiments/{id}/decisions`. RBAC:
+  `decisions:write` (POST), `results:read` (GET). Schema migration
+  `0016_decisions`.
+- M-012: frontend — new `DecisionLogTab` on the experiment detail
+  page (chronological list, status badge, comment, user, timestamp)
+  plus a modal `DecisionForm` (status selector + rationale text).
+  The form is hidden for users without `decisions:write` (checked
+  via `user.permissions[]` populated by `/auth/me`). i18n keys
+  for both `en.json` and `ru.json` (ru.json ships the full set:
+  ship / stop / iterate / inconclusive + form labels). Routes
+  unchanged — the tab was registered as a placeholder in M-005 and
+  is now wired to live data.
+- M-012: `experiments.decision_status` field added to
+  `ExperimentResponse` so the page header (and future list views)
+  can surface the latest decision verdict without an extra fetch.
+
+### Notes
+- M-012 backend tests: 21 new tests in `test_m012_decisions.py` —
+  happy path (4-status matrix + optional comment), 422 on invalid
+  status, 404 on unknown experiment, `decision_status` mirror
+  (single, sequential, rollback-on-failure), list endpoint
+  (empty / chronological / pagination / per-experiment scoping),
+  append-only (no PATCH/DELETE returns 404/405), RBAC (analyst
+  blocked on POST, analyst allowed on GET, viewer blocked on POST),
+  audit log entry, and cascade-delete with the experiment.
+  Combined run: `pytest tests/test_m011_custom_metrics_guardrails.py
+  tests/test_m012_decisions.py tests/test_integration.py -q` →
+  **83 passed** in 58 s.
+- M-012 frontend tests: 3 new tests in `DecisionLogTab.test.jsx`
+  (empty state, "Record decision" button visibility for users with
+  `decisions:write`, hidden for analysts/viewers). Full frontend
+  suite **97 passed** across 33 test files
+  (`npm test -- --run`).
+- M-012 frontend lint: clean (`npm run lint`). Production build:
+  `npm run build` succeeds (1078 KB JS / 317 KB gzipped — +5 KB on
+  top of the M-011 baseline for DecisionLogTab + DecisionForm).
+- M-012 append-only enforcement: no PATCH/DELETE route exists
+  for `/experiments/{id}/decisions` — the absence of the
+  endpoint (returns 404/405) is the application-level guard.
+  Corrections are made by appending a new decision, not by
+  editing history.
+- M-012 status column: `decisions.status` and
+  `experiments.decision_status` are both `VARCHAR(20)` rather
+  than PostgreSQL ENUMs. The four values ("ship", "stop",
+  "iterate", "inconclusive") are validated at the Pydantic layer
+  via `Literal[...]`. VARCHAR keeps the downgrade symmetric
+  (no enum type to drop) and the wire-format stable.
 - M-011: custom metrics subsystem — global, reusable metric templates
   (event + aggregation + AND-combined property filters + optional
   denominator for ratio metrics) snapshotted into per-experiment

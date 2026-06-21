@@ -284,7 +284,22 @@
   },
   "decisions": {
     "empty": "No decisions yet",
-    "comingSoon": "Decision log will appear here once M-012 lands."
+    "subtitle": "Append-only history of ship / stop / iterate / inconclusive decisions for this experiment.",
+    "add": "Record decision",
+    "emptyWrite": "Record the first decision to capture why you're shipping, stopping, iterating, or marking the experiment inconclusive.",
+    "emptyRead": "No decisions have been recorded for this experiment yet.",
+    "ship": "Ship",
+    "stop": "Stop",
+    "iterate": "Iterate",
+    "inconclusive": "Inconclusive",
+    "by": "by {{username}}",
+    "formTitle": "Record a decision",
+    "statusLabel": "Decision",
+    "commentLabel": "Rationale (optional)",
+    "commentPlaceholder": "Why this decision? What did the data show?",
+    "commentHelp": "Plain text. Visible to anyone with read access to this experiment.",
+    "record": "Record",
+    "recorded": "Decision recorded"
   },
   "sampleSize": {
     "title": "Sample size calculator",

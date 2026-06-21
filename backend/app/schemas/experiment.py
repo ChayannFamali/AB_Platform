@@ -178,6 +178,10 @@ class ExperimentResponse(BaseModel):
     started_at: datetime | None
     ended_at: datetime | None
     is_sequential: bool
+    # M-012: latest decision's status, denormalised from the
+    # `decisions` table by `services.decision_service.create_decision`.
+    # NULL until the first decision is recorded.
+    decision_status: str | None = None
     created_at: datetime
     updated_at: datetime
     variants: list[VariantResponse]

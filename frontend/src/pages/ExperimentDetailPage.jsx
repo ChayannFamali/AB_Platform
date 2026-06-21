@@ -219,7 +219,7 @@ export default function ExperimentDetailPage() {
         </TabsContent>
 
         <TabsContent value="decisions">
-          <DecisionLogTab />
+          <DecisionLogTab experimentId={exp.id} />
         </TabsContent>
 
         <TabsContent value="settings">

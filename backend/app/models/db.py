@@ -109,6 +109,17 @@ class Experiment(Base):
     guardrails  = relationship("GuardrailConfig", back_populates="experiment", cascade="all, delete-orphan")
     holdout_group_id = Column(UUID(as_uuid=True), ForeignKey("holdout_groups.id", ondelete="SET NULL"), nullable=True)
     holdout_group    = relationship("HoldoutGroup", back_populates="experiments")
+    # M-012: denormalised mirror of the latest decision's status (one of
+    # "ship", "stop", "iterate", "inconclusive" — see Decision.status).
+    # Updated by `services.decision_service.create_decision`. NULL means
+    # "no decision has been recorded for this experiment yet".
+    decision_status = Column(String(20), nullable=True)
+    decisions        = relationship(
+        "Decision",
+        back_populates="experiment",
+        cascade="all, delete-orphan",
+        order_by="Decision.decided_at.asc()",
+    )
 
 
 # Variant ──────────────────────────────────────────────────────────────────
@@ -789,4 +800,40 @@ class GuardrailConfig(Base):
         ),
         Index("ix_guardrail_configs_experiment", "experiment_id"),
         Index("ix_guardrail_configs_metric", "metric_id"),
+    )
+
+
+# Decision Log ────────────────────────────────────────────────────────
+#
+# M-012: Append-only decision history. Each row records one decision
+# ("ship" / "stop" / "iterate" / "inconclusive") taken on an
+# experiment by a user, with an optional free-form comment. The log is
+# immutable: there are no UPDATE or DELETE endpoints, and the model
+# does not expose a `comment`-editing flow by design.
+#
+# `experiments.decision_status` is a denormalised mirror of the
+# latest decision's `status`. The service layer keeps them in sync on
+# each POST so list/detail reads don't need to JOIN.
+
+class Decision(Base):
+    __tablename__ = "decisions"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False)
+    # VARCHAR(20) (not PG ENUM) — see migration 0016 for rationale.
+    # Allowed values: "ship", "stop", "iterate", "inconclusive".
+    status        = Column(String(20), nullable=False)
+    comment       = Column(Text, nullable=True)
+    decided_by    = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    decided_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    experiment      = relationship("Experiment", back_populates="decisions")
+    # `selectin` mirrors the AuditLog pattern — avoids lazy IO when the
+    # router serialises `decided_by_username` after the row was just
+    # flushed inside the same request.
+    decided_by_user = relationship("User", lazy="selectin")
+
+    __table_args__ = (
+        Index("ix_decisions_experiment_id", "experiment_id"),
+        Index("ix_decisions_decided_at",    "decided_at"),
     )

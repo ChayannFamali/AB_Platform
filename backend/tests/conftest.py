@@ -201,7 +201,8 @@ async def clean_tables() -> None:
                 holdout_exclusions,
                 holdout_groups,
                 guardrail_configs,
-                custom_metrics
+                custom_metrics,
+                decisions
             CASCADE
         """)
         # Re-seed standard roles + their permission sets.

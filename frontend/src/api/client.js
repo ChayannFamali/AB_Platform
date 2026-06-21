@@ -236,3 +236,17 @@ export const deleteGuardrail = (experimentId, guardrailId) =>
   api
     .delete(`/api/v1/experiments/${experimentId}/guardrails/${guardrailId}`)
     .then((r) => r.data)
+
+// ─── Decision Log (M-012) ──────────────────────────────────────────────────
+// Append-only decision history per experiment. UI hides the form for
+// users without `decisions:write` (see DecisionLogTab.jsx for the
+// permission check using user.permissions[]).
+export const getDecisions = (experimentId, params = {}) =>
+  api
+    .get(`/api/v1/experiments/${experimentId}/decisions`, { params })
+    .then((r) => r.data)
+
+export const addDecision = (experimentId, data) =>
+  api
+    .post(`/api/v1/experiments/${experimentId}/decisions`, data)
+    .then((r) => r.data)

@@ -61,6 +61,14 @@ from app.schemas.guardrail import (
     PaginatedGuardrails,
 )
 
+# Decision log schemas (M-012)
+from app.schemas.decision import (
+    DecisionCreate,
+    DecisionResponse,
+    DecisionStatus,
+    PaginatedDecisions,
+)
+
 # Result schemas
 from app.schemas.result import (
     AnalysisResponse,
@@ -204,6 +212,11 @@ __all__ = [
     "GuardrailResponse",
     "GuardrailUpdate",
     "PaginatedGuardrails",
+    # Decision log (M-012)
+    "DecisionCreate",
+    "DecisionResponse",
+    "DecisionStatus",
+    "PaginatedDecisions",
     # Enums
     "ExperimentStatus",
     "MetricType",
