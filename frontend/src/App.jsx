@@ -31,6 +31,8 @@ import ExperimentList from './pages/ExperimentList'
 import FlagDetailPage from './pages/FlagDetailPage'
 import FlagListPage from './pages/FlagListPage'
 import LoginPage from './pages/LoginPage'
+import SegmentBuilderPage from './pages/SegmentBuilderPage'
+import SegmentListPage from './pages/SegmentListPage'
 import RegisterPage from './pages/RegisterPage'
 import SampleSizeCalculatorPage from './pages/SampleSizeCalculatorPage'
 import SettingsPage from './pages/SettingsPage'
@@ -95,6 +97,12 @@ export default function App() {
               className="text-sm text-muted-foreground hover:text-foreground"
             >
               {t('flags.navTitle')}
+            </Link>
+            <Link
+              to="/segments"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t('segments.navTitle')}
             </Link>
             <Link
               to="/settings"
@@ -274,6 +282,30 @@ export default function App() {
                   <PageContainer>
                     <FlagDetailPage />
                   </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/segments"
+              element={
+                <ProtectedRoute>
+                  <SegmentListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/segments/new"
+              element={
+                <ProtectedRoute>
+                  <SegmentBuilderPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/segments/:key"
+              element={
+                <ProtectedRoute>
+                  <SegmentBuilderPage />
                 </ProtectedRoute>
               }
             />

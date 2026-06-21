@@ -194,7 +194,12 @@ async def clean_tables() -> None:
                 experiments,
                 mutex_groups,
                 flag_rules,
-                feature_flags
+                feature_flags,
+                experiment_segments,
+                segment_rules,
+                segments,
+                holdout_exclusions,
+                holdout_groups
             CASCADE
         """)
         # Re-seed standard roles + their permission sets.

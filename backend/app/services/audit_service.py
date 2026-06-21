@@ -54,7 +54,10 @@ async def log_action(
     )
     db.add(entry)
     await db.flush()
-    await db.refresh(entry)
+    # No `db.refresh(entry)` — `entry.id`, `entry.created_at`, etc. are
+    # already populated by the flush above. The previous `refresh()` call
+    # was the source of a MissingGreenlet in some code paths because
+    # `entry.user` is a relationship that wasn't always eager-loaded.
     return entry
 
 

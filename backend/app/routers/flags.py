@@ -324,9 +324,12 @@ async def sdk_evaluate_flag(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_sdk_scope("flags:read")),
 ):
-    """Single-flag evaluation. Returns the boolean result + reason."""
+    """Single-flag evaluation. Returns the boolean result + reason.
+
+    M-010: forwards optional `user_properties` to segment-aware evaluation.
+    """
     value, reason, _ = await flag_service.evaluate_flag(
-        db, data.user_id, data.flag_key,
+        db, data.user_id, data.flag_key, data.user_properties or None,
     )
     return FlagEvaluateResponse(key=data.flag_key, value=value, reason=reason)
 
@@ -340,9 +343,13 @@ async def sdk_evaluate_flags_batch(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_sdk_scope("flags:read")),
 ):
-    """Batch evaluation — preferred for SDK startup."""
+    """Batch evaluation — preferred for SDK startup.
+
+    M-010: forwards optional `user_properties` so segment targeting is
+    evaluated uniformly across all keys in the batch.
+    """
     results = await flag_service.evaluate_flags(
-        db, data.user_id, data.flag_keys,
+        db, data.user_id, data.flag_keys, data.user_properties or None,
     )
     values: dict[str, bool] = {}
     details: dict[str, dict[str, str]] = {}

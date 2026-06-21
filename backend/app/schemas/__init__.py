@@ -64,6 +64,33 @@ from app.schemas.flag import (
     PaginatedFlags,
 )
 
+# Segment schemas (M-010)
+from app.schemas.segment import (
+    PaginatedSegments,
+    SegmentCreate,
+    SegmentEvaluateRequest,
+    SegmentEvaluateResponse,
+    SegmentExperimentLink,
+    SegmentLinkRequest,
+    SegmentListItem,
+    SegmentResponse,
+    SegmentRuleCreate,
+    SegmentRuleResponse,
+    SegmentUpdate,
+)
+
+# Holdout schemas (M-010)
+from app.schemas.holdout import (
+    HoldoutExclusionCreate,
+    HoldoutExclusionResponse,
+    HoldoutGroupCreate,
+    HoldoutGroupListItem,
+    HoldoutGroupResponse,
+    HoldoutGroupUpdate,
+    PaginatedExclusions,
+    PaginatedHoldouts,
+)
+
 # Re-export enums from models for convenience
 from app.models.db import ExperimentStatus, MetricType
 
@@ -117,7 +144,28 @@ __all__ = [
     "FlagRuleResponse",
     "FlagsSummary",
     "PaginatedFlags",
+    # Segment (M-010)
+    "PaginatedSegments",
+    "SegmentCreate",
+    "SegmentEvaluateRequest",
+    "SegmentEvaluateResponse",
+    "SegmentExperimentLink",
+    "SegmentLinkRequest",
+    "SegmentListItem",
+    "SegmentResponse",
+    "SegmentRuleCreate",
+    "SegmentRuleResponse",
+    "SegmentUpdate",
+    # Holdout (M-010)
+    "HoldoutExclusionCreate",
+    "HoldoutExclusionResponse",
+    "HoldoutGroupCreate",
+    "HoldoutGroupListItem",
+    "HoldoutGroupResponse",
+    "HoldoutGroupUpdate",
+    "PaginatedExclusions",
+    "PaginatedHoldouts",
     # Enums
     "ExperimentStatus",
     "MetricType",
-]
+] 

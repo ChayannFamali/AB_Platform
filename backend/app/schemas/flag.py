@@ -140,6 +140,17 @@ class FlagsSummary(BaseModel):
 class FlagEvaluateRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=255)
     flag_key: str = Field(..., min_length=3, max_length=100)
+    # M-010: optional user properties used for segment-rule evaluation.
+    # Backward-compatible — absent or empty means segment rules can't match.
+    user_properties: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Free-form properties about the calling user (country, device_type, "
+            "plan, etc.) used by segment-targeted flag rules. Absent or empty "
+            "means the user matches no segment, so rules with a segment_id "
+            "are skipped and only flag-level/default rules apply."
+        ),
+    )
 
 
 class FlagEvaluateResponse(BaseModel):
@@ -149,7 +160,8 @@ class FlagEvaluateResponse(BaseModel):
         ...,
         description=(
             "Why this value was returned: "
-            "'kill_switch', 'rollout_in', 'rollout_out', 'rule_override'."
+            "'kill_switch', 'rollout_in', 'rollout_out', 'segment_in', "
+            "'segment_out', 'rule_override', 'flag_rollout', 'not_found'."
         ),
     )
 
@@ -161,6 +173,10 @@ class FlagEvaluateBatchRequest(BaseModel):
         min_length=1,
         max_length=100,
         description="Flag keys to evaluate for the given user (max 100).",
+    )
+    user_properties: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Same shape as FlagEvaluateRequest.user_properties.",
     )
 
     @field_validator("flag_keys")

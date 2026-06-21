@@ -23,6 +23,10 @@ async def assign_user(
     """
     Возвращает вариант эксперимента для пользователя.
     Требует X-API-Key с scope `assignments:read` или Bearer токен.
+
+    M-010: optional `user_properties` is forwarded to the assignment
+    service so segment targeting + holdout exclusion can be evaluated.
+    Backward-compatible — clients that don't send it see pre-M-010 behavior.
     """
     try:
         result = await get_or_create_assignment(
@@ -30,6 +34,7 @@ async def assign_user(
             redis=redis,
             user_id=data.user_id,
             experiment_id=data.experiment_id,
+            user_properties=data.user_properties or None,
         )
     except Exception:
         return AssignmentResponse(

@@ -62,6 +62,14 @@ class Experiment(Base):
     variants    = relationship("Variant", back_populates="experiment", cascade="all, delete-orphan")
     metrics     = relationship("Metric",  back_populates="experiment", cascade="all, delete-orphan")
     results     = relationship("Result",  back_populates="experiment", cascade="all, delete-orphan")
+    segments    = relationship(
+        "Segment",
+        secondary="experiment_segments",
+        back_populates="experiments",
+        lazy="selectin",
+    )
+    holdout_group_id = Column(UUID(as_uuid=True), ForeignKey("holdout_groups.id", ondelete="SET NULL"), nullable=True)
+    holdout_group    = relationship("HoldoutGroup", back_populates="experiments")
 
 
 # Variant ──────────────────────────────────────────────────────────────────
@@ -411,16 +419,164 @@ class FlagRule(Base):
 
     id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     flag_id            = Column(UUID(as_uuid=True), ForeignKey("feature_flags.id", ondelete="CASCADE"), nullable=False)
-    segment_id         = Column(UUID(as_uuid=True), nullable=True)
+    segment_id         = Column(UUID(as_uuid=True), ForeignKey("segments.id", ondelete="SET NULL"), nullable=True)
     rollout_percentage = Column(Float, nullable=False)
     priority           = Column(Integer, nullable=False, server_default=text("0"))
     enabled            = Column(Boolean, nullable=False, server_default=text("true"))
     created_at         = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    flag = relationship("FeatureFlag", back_populates="rules")
+    flag    = relationship("FeatureFlag", back_populates="rules")
+    segment = relationship("Segment")
 
     __table_args__ = (
         Index("ix_flag_rules_flag_priority", "flag_id", "priority"),
+    )
+
+
+# Segments ───────────────────────────────────────────────────────────
+#
+# M-010 (Segments + Holdouts). A `Segment` is a named, reusable set of
+# matching rules applied to a user's properties dict (sent by the SDK
+# at evaluate time). `SegmentRule` rows are AND-combined.
+#
+# - `segments.key` is the stable identifier (e.g. "eu_users",
+#   "mobile_users") — referenced from flag_rules and from
+#   `experiment_segments` (M2M linking).
+# - `segment_rules.value` is JSONB so `in` / `not_in` can hold arrays
+#   while `eq` / `gt` / `contains` hold scalars.
+# - Evaluation is server-side: `segment_service.evaluate_segment`
+#   walks rules in priority order and returns whether the user
+#   matches (all enabled rules must match — AND logic).
+
+class Segment(Base):
+    __tablename__ = "segments"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key         = Column(String(100), nullable=False, unique=True)
+    name        = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_by  = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    rules = relationship(
+        "SegmentRule",
+        back_populates="segment",
+        cascade="all, delete-orphan",
+        order_by="SegmentRule.priority.asc()",
+    )
+    created_by_user = relationship("User")
+    experiments     = relationship(
+        "Experiment",
+        secondary="experiment_segments",
+        back_populates="segments",
+    )
+    flag_rules      = relationship("FlagRule", back_populates="segment")
+
+    __table_args__ = (
+        Index("ix_segments_key", "key", unique=True),
+    )
+
+
+class SegmentRule(Base):
+    __tablename__ = "segment_rules"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    segment_id  = Column(UUID(as_uuid=True), ForeignKey("segments.id", ondelete="CASCADE"), nullable=False)
+    field       = Column(String(100), nullable=False)
+    operator    = Column(String(20), nullable=False)
+    value       = Column(JSONB, nullable=False)
+    priority    = Column(Integer, nullable=False, server_default=text("0"))
+    enabled     = Column(Boolean, nullable=False, server_default=text("true"))
+    created_at  = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    segment = relationship("Segment", back_populates="rules")
+
+    __table_args__ = (
+        Index("ix_segment_rules_segment_priority", "segment_id", "priority"),
+    )
+
+
+class ExperimentSegment(Base):
+    """
+    Many-to-many: experiments ↔ segments (targeting).
+
+    An experiment linked to a segment only assigns users who match
+    that segment (see `assignment_service`). Rows are added/removed
+    via the segment CRUD endpoints — no separate M2M endpoint for now.
+
+    Pure association table — no ORM relationships declared here on
+    purpose. The bidirectional M2M is wired via `secondary=` on the
+    `Experiment.segments` and `Segment.experiments` relationships
+    (mirrors the `user_roles` pattern from M-003).
+    """
+    __tablename__ = "experiment_segments"
+
+    experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="CASCADE"), primary_key=True)
+    segment_id    = Column(UUID(as_uuid=True), ForeignKey("segments.id",    ondelete="CASCADE"), primary_key=True)
+    added_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_experiment_segments_segment_id", "segment_id"),
+    )
+
+
+# Holdouts ──────────────────────────────────────────────────────────
+#
+# M-010 (Segments + Holdouts). A `HoldoutGroup` is a long-term
+# measurement baseline: a deterministic fraction of users (e.g. 10%)
+# are excluded from all linked experiments so analysts can compare
+# experiment outcomes against a clean, never-exposed cohort.
+#
+# `holdout_exclusions` lets admins manually pull specific users
+# OUT of the holdout (e.g. VIP accounts, internal staff) — even if
+# they would otherwise fall in the bucketed cohort.
+#
+# `experiments.holdout_group_id` links an experiment to the holdout
+# cohort to exclude. Assignment service checks holdout membership
+# BEFORE bucket / variant pick.
+
+class HoldoutGroup(Base):
+    __tablename__ = "holdout_groups"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key         = Column(String(100), nullable=False, unique=True)
+    name        = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    size_pct    = Column(Float, nullable=False, server_default=text("10"))
+    is_active   = Column(Boolean, nullable=False, server_default=text("true"))
+    created_by  = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    exclusions      = relationship(
+        "HoldoutExclusion",
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
+    experiments     = relationship("Experiment", back_populates="holdout_group")
+    created_by_user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_holdout_groups_key", "key", unique=True),
+    )
+
+
+class HoldoutExclusion(Base):
+    __tablename__ = "holdout_exclusions"
+
+    holdout_group_id = Column(UUID(as_uuid=True), ForeignKey("holdout_groups.id", ondelete="CASCADE"), primary_key=True)
+    user_id          = Column(String(255), primary_key=True)
+    reason           = Column(Text, nullable=True)
+    excluded_by      = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    excluded_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    group = relationship("HoldoutGroup", back_populates="exclusions")
+    # `selectin` to avoid lazy IO — same reason as AuditLog.user above.
+    user  = relationship("User", lazy="selectin")
+
+    __table_args__ = (
+        Index("ix_holdout_exclusions_user_id", "user_id"),
     )
 
 
@@ -456,7 +612,10 @@ class AuditLog(Base):
     user_agent    = Column(Text, nullable=True)
     created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    user = relationship("User")
+    # `selectin` avoids lazy IO when audit_service.db.refresh() runs after
+    # the entry was just added — without it, the lazy `user` relationship
+    # can trigger a MissingGreenlet inside the async refresh path.
+    user = relationship("User", lazy="selectin")
 
     __table_args__ = (
         Index("ix_audit_log_created_at",    "created_at"),

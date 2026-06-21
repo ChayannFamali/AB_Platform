@@ -104,3 +104,79 @@ export const deleteFlagRule = (flagId, ruleId) =>
 
 export const getFlagSummary = () =>
   api.get('/api/v1/flags/summary').then((r) => r.data)
+
+// ─── Segments (M-010) ──────────────────────────────────────────────────────
+// Targeting definitions reusable across flags and experiments. Rules
+// inside a segment are AND-combined; user_properties is the matching
+// input (passed by the SDK at evaluate time).
+export const getSegments = (params = {}) =>
+  api.get('/api/v1/segments', { params }).then((r) => r.data)
+
+export const getSegment = (id) =>
+  api.get(`/api/v1/segments/${id}`).then((r) => r.data)
+
+export const getSegmentByKey = (key) =>
+  api.get(`/api/v1/segments/by-key/${key}`).then((r) => r.data)
+
+export const createSegment = (data) =>
+  api.post('/api/v1/segments', data).then((r) => r.data)
+
+export const updateSegment = (id, data) =>
+  api.patch(`/api/v1/segments/${id}`, data).then((r) => r.data)
+
+export const deleteSegment = (id) =>
+  api.delete(`/api/v1/segments/${id}`).then((r) => r.data)
+
+export const addSegmentRule = (id, data) =>
+  api.post(`/api/v1/segments/${id}/rules`, data).then((r) => r.data)
+
+export const deleteSegmentRule = (segmentId, ruleId) =>
+  api.delete(`/api/v1/segments/${segmentId}/rules/${ruleId}`).then((r) => r.data)
+
+// Dry-run a segment against a hypothetical user_properties payload.
+export const evaluateSegment = (id, userProperties) =>
+  api
+    .post(`/api/v1/segments/${id}/evaluate`, { user_properties: userProperties })
+    .then((r) => r.data)
+
+// M2M linking: attach a segment to one or more experiments.
+export const linkSegmentToExperiments = (id, experimentIds) =>
+  api
+    .post(`/api/v1/segments/${id}/experiments`, { experiment_ids: experimentIds })
+    .then((r) => r.data)
+
+export const unlinkSegmentFromExperiment = (id, experimentId) =>
+  api
+    .delete(`/api/v1/segments/${id}/experiments/${experimentId}`)
+    .then((r) => r.data)
+
+// ─── Holdouts (M-010) ──────────────────────────────────────────────────────
+// Long-term measurement baselines. A deterministic fraction of users
+// (size_pct) is excluded from linked experiments so analysts can compare
+// outcomes against a never-exposed cohort.
+export const getHoldouts = (params = {}) =>
+  api.get('/api/v1/holdouts', { params }).then((r) => r.data)
+
+export const getHoldout = (id) =>
+  api.get(`/api/v1/holdouts/${id}`).then((r) => r.data)
+
+export const getHoldoutByKey = (key) =>
+  api.get(`/api/v1/holdouts/by-key/${key}`).then((r) => r.data)
+
+export const createHoldout = (data) =>
+  api.post('/api/v1/holdouts', data).then((r) => r.data)
+
+export const updateHoldout = (id, data) =>
+  api.patch(`/api/v1/holdouts/${id}`, data).then((r) => r.data)
+
+export const deleteHoldout = (id) =>
+  api.delete(`/api/v1/holdouts/${id}`).then((r) => r.data)
+
+export const getHoldoutExclusions = (id, params = {}) =>
+  api.get(`/api/v1/holdouts/${id}/exclusions`, { params }).then((r) => r.data)
+
+export const addHoldoutExclusion = (id, data) =>
+  api.post(`/api/v1/holdouts/${id}/exclusions`, data).then((r) => r.data)
+
+export const removeHoldoutExclusion = (id, userId) =>
+  api.delete(`/api/v1/holdouts/${id}/exclusions/${userId}`).then((r) => r.data)

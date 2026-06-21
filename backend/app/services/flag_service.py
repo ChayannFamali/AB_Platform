@@ -1,13 +1,13 @@
 """
-Feature flag service (M-009, ADR-004).
+Feature flag service (M-009 + M-010, ADR-004).
 
 Responsibilities:
 - CRUD on `FeatureFlag` and its nested `FlagRule` rows.
-- `evaluate_flag(user_id, flag_key)` — single-flag evaluation with
-  deterministic SHA256 bucketing. Returns `(value, reason)` so the
-  SDK can show *why* a flag was on or off.
-- `evaluate_flags(user_id, flag_keys)` — batch version, used by SDK
-  startup and warm-path rendering.
+- `evaluate_flag(db, user_id, flag_key, user_properties)` — single-flag
+  evaluation with deterministic SHA256 bucketing. Returns
+  `(value, reason, found)` so the SDK can show *why* a flag was on or off.
+- `evaluate_flags(db, user_id, flag_keys, user_properties)` — batch
+  version, used by SDK startup and warm-path rendering.
 - `list_flags_summary(db)` — aggregate counts for the Dashboard
   "Active flags" card.
 
@@ -15,15 +15,24 @@ Bucketing:
     bucket = sha256(f"flag:{key}:{user_id}")[:4] % 100
     value  = bucket < rollout_percentage
 
-The namespace ("flag:") is distinct from the experiment / traffic
-buckets used elsewhere, so the same `user_id` produces independent
-outcomes across flag rollouts and experiment assignments.
+The namespace ("flag:") is distinct from experiment / traffic / holdout
+bucketing so flag outcomes stay independent of every other bucketing
+decision.
+
+Rule resolution (M-010 — segment-aware):
+    1. flag.enabled == False → 0, "kill_switch"
+    2. For each enabled rule in priority order:
+       a. If rule has a segment_id AND the user matches that segment →
+          use rule.rollout_percentage, reason "segment_in".
+          First matching rule wins — stop iterating.
+       b. If rule has no segment_id (acts as "default for everyone") →
+          use rule.rollout_percentage, reason "rule_override".
+          Acts as fallback when no segment rule matched.
+    3. Otherwise → flag.rollout_percentage, reason "flag_rollout".
 
 Audit hooks:
     Every mutation appends an `audit_log` row with `resource_type =
     "feature_flag"` and a `details` blob capturing the relevant state.
-    Rules are not audited individually — the parent flag's `rules`
-    field is included in the audit details.
 """
 from __future__ import annotations
 
@@ -38,13 +47,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.db import FeatureFlag, FlagRule, User
+from app.models.db import FeatureFlag, FlagRule, Segment, User
 from app.schemas.flag import (
     FeatureFlagCreate,
     FeatureFlagUpdate,
     FlagRuleCreate,
     FlagsSummary,
 )
+from app.services import segment_service
 
 logger = logging.getLogger(__name__)
 
@@ -243,27 +253,48 @@ async def list_flags_summary(db: AsyncSession) -> FlagsSummary:
 # ── Evaluation ──────────────────────────────────────────────────────────────
 
 
-def _resolve_rollout(flag: FeatureFlag) -> tuple[float, str]:
+def _resolve_rollout(
+    flag: FeatureFlag, user_properties: dict[str, Any] | None = None
+) -> tuple[float, str]:
     """
     Pick which rollout percentage to apply. Returns (rollout, reason).
 
-    Priority:
-    1. flag.enabled == False → 0, "kill_switch"
-       (handled by callers, not here — this helper assumes enabled=True)
-    2. enabled rule with no segment_id, lowest priority → rule.rollout_percentage
-    3. otherwise → flag.rollout_percentage
+    M-010 — segment-aware:
+      1. Enabled rule WITH a segment_id AND the user matches that segment
+         → rule.rollout_percentage, reason "segment_in".
+         First matching rule by priority asc wins.
+      2. Enabled rule WITHOUT a segment_id (lowest priority "default for
+         everyone") → rule.rollout_percentage, reason "rule_override".
+      3. Otherwise → flag.rollout_percentage, reason "flag_rollout".
+
+    `user_properties` is required for step 1. When it's None or empty,
+    segment rules cannot match and we skip straight to step 2.
 
     `reason` is a human-readable label for the SDK / audit log.
     """
+    rules = sorted(flag.rules or [], key=lambda r: r.priority)
+    enabled_rules = [r for r in rules if r.enabled]
+
+    # 1. First segment-matching rule wins.
+    if user_properties:
+        for rule in enabled_rules:
+            if rule.segment_id is None:
+                continue
+            segment = rule.segment
+            if segment is None:
+                continue
+            if segment_service.evaluate_segment(segment, user_properties).matches:
+                return float(rule.rollout_percentage), "segment_in"
+
+    # 2. Default-for-everyone override (lowest priority without segment_id).
     default_rule = next(
-        (
-            r for r in (flag.rules or [])
-            if r.enabled and r.segment_id is None
-        ),
+        (r for r in enabled_rules if r.segment_id is None),
         None,
     )
     if default_rule is not None:
         return float(default_rule.rollout_percentage), "rule_override"
+
+    # 3. Flag-level fallback.
     return float(flag.rollout_percentage), "flag_rollout"
 
 
@@ -271,6 +302,7 @@ async def evaluate_flag(
     db: AsyncSession,
     user_id: str,
     flag_key: str,
+    user_properties: dict[str, Any] | None = None,
 ) -> tuple[bool, str, bool]:
     """
     Evaluate a single flag for a given user.
@@ -278,7 +310,8 @@ async def evaluate_flag(
     Returns `(value, reason, found)`:
       - `value`  — the boolean result (defaults to False on miss/error)
       - `reason` — one of "kill_switch", "rollout_in", "rollout_out",
-                   "rule_override", "not_found"
+                   "segment_in", "segment_out", "rule_override",
+                   "flag_rollout", "not_found"
       - `found`  — False if no flag with that key exists
     """
     flag = await _load_flag_by_key(db, flag_key)
@@ -286,15 +319,20 @@ async def evaluate_flag(
         return False, "not_found", False
     if not flag.enabled:
         return False, "kill_switch", True
-    rollout, _ = _resolve_rollout(flag)
+    rollout, reason = _resolve_rollout(flag, user_properties)
     bucket = get_flag_bucket(user_id, flag_key)
-    return bucket < rollout, ("rollout_in" if bucket < rollout else "rollout_out"), True
+    if reason == "segment_in":
+        outcome = "segment_in" if bucket < rollout else "segment_out"
+    else:
+        outcome = "rollout_in" if bucket < rollout else "rollout_out"
+    return bucket < rollout, outcome, True
 
 
 async def evaluate_flags(
     db: AsyncSession,
     user_id: str,
     flag_keys: list[str],
+    user_properties: dict[str, Any] | None = None,
 ) -> dict[str, tuple[bool, str, bool]]:
     """Batch evaluation. Missing keys return `found=False`."""
     if not flag_keys:
@@ -304,7 +342,30 @@ async def evaluate_flags(
         .options(selectinload(FeatureFlag.rules))
         .where(FeatureFlag.key.in_(flag_keys))
     )
-    flags = {f.key: f for f in (await db.execute(stmt)).scalars().all()}
+    flags = {f.key: f for f in (await db.execute(stmt)).scalars().unique().all()}
+
+    # Eager-load every segment referenced by any rule's segment_id so
+    # `_resolve_rollout` can check membership without lazy IO.
+    segment_ids = {
+        r.segment_id
+        for f in flags.values()
+        for r in (f.rules or [])
+        if r.segment_id is not None
+    }
+    if segment_ids:
+        seg_rows = (
+            await db.execute(
+                select(Segment)
+                .options(selectinload(Segment.rules))
+                .where(Segment.id.in_(segment_ids))
+            )
+        ).scalars().unique().all()
+        seg_by_id = {s.id: s for s in seg_rows}
+        for f in flags.values():
+            for r in (f.rules or []):
+                if r.segment_id is not None:
+                    r.segment = seg_by_id.get(r.segment_id)
+
     out: dict[str, tuple[bool, str, bool]] = {}
     for key in flag_keys:
         flag = flags.get(key)
@@ -314,9 +375,13 @@ async def evaluate_flags(
         if not flag.enabled:
             out[key] = (False, "kill_switch", True)
             continue
-        rollout, _ = _resolve_rollout(flag)
+        rollout, reason = _resolve_rollout(flag, user_properties)
         bucket = get_flag_bucket(user_id, key)
-        out[key] = bucket < rollout, ("rollout_in" if bucket < rollout else "rollout_out"), True
+        if reason == "segment_in":
+            outcome = "segment_in" if bucket < rollout else "segment_out"
+        else:
+            outcome = "rollout_in" if bucket < rollout else "rollout_out"
+        out[key] = bucket < rollout, outcome, True
     return out
 
 

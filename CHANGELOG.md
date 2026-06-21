@@ -2,7 +2,66 @@
 
 ## [Unreleased]
 
+### Notes
+- M-010 backend tests: 38 new tests pass (22 segment: 6 operator unit
+  tests covering all 9 operators, 8 CRUD lifecycle, 1 rule CRUD, 3 AND
+  logic + dry-run breakdown, 1 experiment linking, 1 RBAC, 1 audit, 1
+  empty-rules; 16 holdout: 3 bucketing unit tests, 5 CRUD lifecycle,
+  2 exclusion CRUD, 1 inactive semantics, 1 assignment integration
+  with 100% holdout, 1 flag SDK backward-compat smoke, 2 audit).
+  Full backend suite **176 passed, 0 failed** (`pytest tests/ -q` —
+  138 prior + 38 new).
+- M-010 frontend tests: 3 new SegmentRuleRow tests (default render,
+  field onChange, remove callback). Full frontend suite **87 passed,
+  0 failed** across 30 test files (`npm run test:run`).
+- M-010 frontend lint: clean (`npm run lint`).
+- M-010 frontend bundle: `npm run build` succeeds
+  (1039 KB JS / 310 KB gzipped — +40 KB on top of the M-009 baseline
+  for SegmentListPage + SegmentBuilderPage + 2 sub-components +
+  extended FlagRuleEditor + i18n namespace).
+- M-010 migrations verified: `alembic upgrade head` and
+  `downgrade -1` both run cleanly on the test database (0010_segments
+  depends on 0009_feature_flags; 0011_holdouts depends on 0010).
+- M-010 SDK backward compatibility: SDK v0.2.x methods (`get_flag`,
+  `get_flags`, `getVariant`, `trackEvent`, `flush`) are unchanged.
+  The SDK clients don't have to send `user_properties` — omitting it
+  preserves the pre-M-010 evaluation path.
+- M-010 holdout semantics: per the design decision, holdout users
+  receive `default` for flag evaluations (rollout is treated as
+  inactive for them) so the cohort stays clean for measurement.
+- M-010 segment reservation: `FlagRule.segment_id` now has a proper FK
+  to `segments.id` (ON DELETE SET NULL). M-009 rows that left the
+  column as `NULL` trivially satisfy the new constraint.
+- M-010 operator set: the 9 supported operators are listed in
+  `segment_service.SEGMENT_OPERATORS` — used by the API to validate
+  payloads (422 on unknown operator) and by the matcher to dispatch
+  comparisons. `in` / `not_in` expect a list; `gt` / `lt` / `gte` /
+  `lte` coerce via `float()` when possible.
+
 ### Added
+- M-010: Segments + Holdout Groups (ADR-004 follow-on). Six new tables
+  (`segments`, `segment_rules`, `experiment_segments`,
+  `holdout_groups`, `holdout_exclusions`) plus FK on `flag_rules.segment_id`
+  and `experiments.holdout_group_id`. Segments are reusable targeting
+  definitions: 9 operators (eq/neq/in/not_in/gt/lt/gte/lte/contains)
+  AND-combined into named segments; `user_properties` is passed by the
+  SDK at evaluate time. Holdout groups are deterministic measurement
+  baselines (`holdout:` bucket namespace) that exclude users from linked
+  experiments AND from flag rollouts. UI routers under `/api/v1/segments`
+  and `/api/v1/holdouts` (`segments:read` / `segments:write` /
+  `holdouts:read` / `holdouts:write`). SDK routers (`/assignments`,
+  `/sdk/flags/evaluate`, `/sdk/flags/evaluate-batch`) accept an
+  optional `user_properties` dict — backward-compatible: omitting it
+  preserves pre-M-010 behavior. `flag_service._resolve_rollout` is now
+  segment-aware (reason codes `segment_in` / `segment_out`); segment
+  rule with a matching `segment_id` wins over flag-level rollout.
+  `assignment_service` checks holdout BEFORE bucket/variant pick and
+  validates segment match against linked `experiment_segments` (OR
+  across segments). Frontend: new `SegmentListPage` (`/segments`),
+  `SegmentBuilderPage` (`/segments/new` and `/segments/:key`) with a
+  visual rule builder + live dry-run preview; `FlagRuleEditor` now
+  exposes a "Apply to segment" select. New components:
+  `SegmentRuleRow`, `SegmentPreview`. i18n keys (ru + en).
 - M-009: Feature flags — kill switches + gradual rollouts + SDK contract
   (ADR-004). Two new tables (`feature_flags`, `flag_rules`) with
   `segment_id` reserved (nullable UUID, no FK yet — wired up by M-010).
