@@ -1,11 +1,27 @@
 import axios from 'axios'
 
+import { useAuthStore } from '../stores/authStore'
+
 const api = axios.create({ baseURL: '' })
 
 // ─── Interceptors ─────────────────────────────────────────────────────────────
+//
+// M-013 fix: the previous implementation read the JWT from
+// `localStorage.getItem('access_token')`, but the auth store writes the
+// token via zustand's `persist` middleware under the key
+// `ab-platform-auth`. Two writers, zero readers — every authenticated
+// request went out without an Authorization header, the backend
+// returned 401, and the response interceptor then hard-redirected
+// users to /login on the very first click after login.
+//
+// Now both interceptors read from / clear the zustand store directly,
+// which is the single source of truth for the JWT.
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
+  // `getState()` is the imperative API — safe to call outside React
+  // components (interceptors are not hooks). The store has been
+  // hydrated by the persist middleware on app boot.
+  const token = useAuthStore.getState().token
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -16,9 +32,11 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const path = window.location.pathname
       if (path !== '/login' && path !== '/register') {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('user')
-        window.location.href = '/login'
+        // Clear the auth store (and its persisted slice). The
+        // navigation happens via the React Router guard once the
+        // store update propagates — no full-page reload required,
+        // so we don't lose UI state.
+        useAuthStore.getState().logout()
       }
     }
     return Promise.reject(error)
