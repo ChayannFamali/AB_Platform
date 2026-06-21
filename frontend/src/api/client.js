@@ -180,3 +180,59 @@ export const addHoldoutExclusion = (id, data) =>
 
 export const removeHoldoutExclusion = (id, userId) =>
   api.delete(`/api/v1/holdouts/${id}/exclusions/${userId}`).then((r) => r.data)
+
+// ─── Custom Metrics (M-011) ─────────────────────────────────────────────────
+// Reusable metric templates. A CustomMetric encodes "what to measure"
+// once and is snapshotted into a per-experiment Metric row at
+// experiment-creation time. Editing a template does NOT mutate existing
+// experiment metrics — they are immutable snapshots.
+export const getCustomMetrics = (params = {}) =>
+  api.get('/api/v1/custom-metrics', { params }).then((r) => r.data)
+
+export const getCustomMetric = (id) =>
+  api.get(`/api/v1/custom-metrics/${id}`).then((r) => r.data)
+
+export const getCustomMetricByKey = (key) =>
+  api.get(`/api/v1/custom-metrics/by-key/${key}`).then((r) => r.data)
+
+export const createCustomMetric = (data) =>
+  api.post('/api/v1/custom-metrics', data).then((r) => r.data)
+
+export const updateCustomMetric = (id, data) =>
+  api.patch(`/api/v1/custom-metrics/${id}`, data).then((r) => r.data)
+
+export const deleteCustomMetric = (id) =>
+  api.delete(`/api/v1/custom-metrics/${id}`).then((r) => r.data)
+
+// Dry-run a custom metric against a hypothetical user_properties payload.
+export const previewCustomMetric = (id, userProperties) =>
+  api
+    .post(`/api/v1/custom-metrics/${id}/preview`, { user_properties: userProperties })
+    .then((r) => r.data)
+
+// ─── Guardrails (M-011) ──────────────────────────────────────────────────────
+// Per-experiment thresholds that fire (warning) or block (critical)
+// variants when treatment crosses the configured lift. Nested under
+// experiments so the URL carries the experiment_id naturally.
+export const getGuardrails = (experimentId, params = {}) =>
+  api
+    .get(`/api/v1/experiments/${experimentId}/guardrails`, { params })
+    .then((r) => r.data)
+
+export const createGuardrail = (experimentId, data) =>
+  api
+    .post(`/api/v1/experiments/${experimentId}/guardrails`, data)
+    .then((r) => r.data)
+
+export const updateGuardrail = (experimentId, guardrailId, data) =>
+  api
+    .patch(
+      `/api/v1/experiments/${experimentId}/guardrails/${guardrailId}`,
+      data,
+    )
+    .then((r) => r.data)
+
+export const deleteGuardrail = (experimentId, guardrailId) =>
+  api
+    .delete(`/api/v1/experiments/${experimentId}/guardrails/${guardrailId}`)
+    .then((r) => r.data)

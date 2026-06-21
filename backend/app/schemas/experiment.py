@@ -1,12 +1,13 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.models.db import ExperimentStatus, MetricType
+from app.models.db import ExperimentStatus, MetricAggregation, MetricType
 
 
-# Variant 
+# Variant
 
 class VariantCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -25,12 +26,35 @@ class VariantResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# Metric 
+# Metric
+
+class MetricFilterInput(BaseModel):
+    """
+    Inline filter shape used by `MetricCreate.filters` (and persisted as
+    JSONB on `metrics.filters`). Mirrors
+    `app.schemas.custom_metric.MetricFilterCreate` but is duplicated here
+    to avoid a schemas ↔ schemas import cycle.
+    """
+    field:    str  = Field(..., min_length=1, max_length=100)
+    operator: str  = Field(..., min_length=1, max_length=20)
+    value:    Any
+    priority: int  = 0
+    enabled:  bool = True
+
 
 class MetricCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-    event_name: str = Field(..., min_length=1, max_length=255)
-    denominator_event_name: str | None = Field( 
+    event_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description=(
+            "Required unless `custom_metric_id` is set — in that case the "
+            "template's event_name is snapshotted onto the Metric row and "
+            "any value provided here is ignored."
+        ),
+    )
+    denominator_event_name: str | None = Field(
         default=None,
         max_length=255,
         description=(
@@ -40,12 +64,34 @@ class MetricCreate(BaseModel):
             "Если None — стандартная revenue/duration метрика."
         ),
     )
-    metric_type: MetricType
+    metric_type: MetricType | None = None
     is_primary: bool = False
     is_guardrail: bool = False
+    # M-011: explicit aggregation overrides the metric_type-based default
+    # the engine used before M-011. When NULL the engine infers
+    # (count/sum/avg) so pre-M-011 rows continue to work.
+    aggregation: MetricAggregation | None = None
+    # M-011: inline filter list. When `custom_metric_id` is set, the
+    # service copies the template's filters here (template wins).
+    filters: list[MetricFilterInput] | None = None
+    # M-011: when set, the experiment_service snapshots the CustomMetric
+    # into this Metric row via `custom_metric_service.copy_to_metric`.
+    # The template itself is never mutated.
+    custom_metric_id: UUID | None = None
 
     @model_validator(mode="after")
-    def validate_denominator(self) -> "MetricCreate":
+    def _validate(self) -> "MetricCreate":
+        # When no template is referenced, event_name + metric_type are
+        # required (the engine needs both to compute anything).
+        if not self.custom_metric_id:
+            if not self.event_name:
+                raise ValueError(
+                    "event_name обязателен, когда custom_metric_id не задан."
+                )
+            if not self.metric_type:
+                raise ValueError(
+                    "metric_type обязателен, когда custom_metric_id не задан."
+                )
         if self.denominator_event_name and self.metric_type == MetricType.CONVERSION:
             raise ValueError(
                 "denominator_event_name не применим к conversion метрикам. "
@@ -53,6 +99,7 @@ class MetricCreate(BaseModel):
             )
         if (
             self.denominator_event_name
+            and self.event_name
             and self.denominator_event_name == self.event_name
         ):
             raise ValueError(
@@ -66,10 +113,13 @@ class MetricResponse(BaseModel):
     experiment_id: UUID
     name: str
     event_name: str
-    denominator_event_name: str | None  
+    denominator_event_name: str | None
     metric_type: MetricType
     is_primary: bool
     is_guardrail: bool
+    aggregation: MetricAggregation | None
+    filters: list[dict] | None
+    custom_metric_id: UUID | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

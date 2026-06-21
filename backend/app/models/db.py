@@ -28,6 +28,44 @@ class MetricType(str, Enum):
     DURATION   = "duration"
 
 
+class MetricAggregation(str, Enum):
+    """
+    How a metric collapses many events per user into one scalar.
+
+    - count:        number of matching events (NULL `value` per event)
+    - sum:          sum of `events.value` across matching events
+    - avg:          mean of `events.value` across matching events
+    - unique_count: count of distinct values (e.g. distinct SKU bought)
+    """
+    COUNT        = "count"
+    SUM          = "sum"
+    AVG          = "avg"
+    UNIQUE_COUNT = "unique_count"
+
+
+class GuardrailSeverity(str, Enum):
+    WARNING  = "warning"
+    CRITICAL = "critical"
+
+
+class GuardrailDirection(str, Enum):
+    """
+    Which side of the comparison is "bad".
+
+    - BELOW: treatment is X% LOWER than control (e.g. revenue drops)
+    - ABOVE: treatment is X% HIGHER than control (e.g. error rate rises)
+    """
+    BELOW = "below"
+    ABOVE = "above"
+
+
+# `values_callable` for SAEnum columns: tells SA to serialize the
+# lowercase `.value` ("sum", "below") instead of the uppercase `.name`
+# ("SUM", "BELOW"). The PostgreSQL enum labels match the wire-format
+# strings used by Pydantic / API clients.
+_ENUM_VALUES = lambda enum: [e.value for e in enum]  # noqa: E731
+
+
 # MutexGroup ───────────────────────────────────────────────────────────────
 
 class MutexGroup(Base):
@@ -68,6 +106,7 @@ class Experiment(Base):
         back_populates="experiments",
         lazy="selectin",
     )
+    guardrails  = relationship("GuardrailConfig", back_populates="experiment", cascade="all, delete-orphan")
     holdout_group_id = Column(UUID(as_uuid=True), ForeignKey("holdout_groups.id", ondelete="SET NULL"), nullable=True)
     holdout_group    = relationship("HoldoutGroup", back_populates="experiments")
 
@@ -98,18 +137,32 @@ class Variant(Base):
 class Metric(Base):
     __tablename__ = "metrics"
 
-    id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    experiment_id        = Column(UUID(as_uuid=True), ForeignKey("experiments.id"), nullable=False)
-    name                 = Column(String(255), nullable=False)
-    event_name           = Column(String(255), nullable=False) 
-    denominator_event_name = Column(String(255), nullable=True)  
-    metric_type          = Column(SAEnum(MetricType), nullable=False)
-    is_primary           = Column(Boolean, default=False, nullable=False)
-    is_guardrail         = Column(Boolean, default=False, nullable=False)
-    created_at           = Column(DateTime, default=datetime.utcnow, nullable=False)
+    id                     = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    experiment_id          = Column(UUID(as_uuid=True), ForeignKey("experiments.id"), nullable=False)
+    name                   = Column(String(255), nullable=False)
+    event_name             = Column(String(255), nullable=False)
+    denominator_event_name = Column(String(255), nullable=True)
+    metric_type            = Column(SAEnum(MetricType), nullable=False)
+    is_primary             = Column(Boolean, default=False, nullable=False)
+    is_guardrail           = Column(Boolean, default=False, nullable=False)
+    # M-011: nullable so existing rows from earlier milestones stay valid.
+    # When NULL, the engine infers the aggregation from `metric_type`
+    # (count for conversion, sum for revenue, avg for duration).
+    aggregation            = Column(SAEnum(MetricAggregation, values_callable=_ENUM_VALUES), nullable=True)
+    # M-011: AND-combined property filters applied at event-read time.
+    # Shape: [{"field": "country", "operator": "eq", "value": "DE"}, ...].
+    # Same operators as segment_rules.
+    filters                = Column(JSONB, nullable=True)
+    # M-011: back-reference to the CustomMetric this row was snapshotted
+    # from. NULL for hand-rolled metrics. Kept for traceability — the
+    # metric continues to function if the source custom metric is deleted.
+    custom_metric_id       = Column(UUID(as_uuid=True), ForeignKey("custom_metrics.id", ondelete="SET NULL"), nullable=True)
+    created_at             = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    experiment = relationship("Experiment", back_populates="metrics")
-    results    = relationship("Result",     back_populates="metric")
+    experiment      = relationship("Experiment",    back_populates="metrics")
+    results         = relationship("Result",        back_populates="metric")
+    custom_metric   = relationship("CustomMetric",  back_populates="experiment_metrics")
+    guardrails      = relationship("GuardrailConfig", back_populates="metric", cascade="all, delete-orphan")
 
 
 # Assignment ───────────────────────────────────────────────────────────────
@@ -622,4 +675,118 @@ class AuditLog(Base):
         Index("ix_audit_log_user_id",       "user_id"),
         Index("ix_audit_log_resource_type", "resource_type"),
         Index("ix_audit_log_action",        "action"),
+    )
+
+
+# Custom Metrics ─────────────────────────────────────────────────────
+#
+# M-011: Reusable metric templates. A CustomMetric encodes "what to
+# measure" once (event_name, aggregation, filters, denominator) and is
+# snapshotted into a per-experiment `Metric` row via `custom_metric_id`
+# at experiment-creation time. Editing a CustomMetric does NOT mutate
+# existing experiment metrics — they are immutable snapshots. This
+# keeps analysis reproducible.
+#
+# Filters are AND-combined and use the same operators as
+# segment_rules (eq/neq/in/not_in/gt/lt/gte/lte/contains).
+#
+# Ratio metrics (e.g. purchases-per-session) are represented by setting
+# `metric_type = REVENUE` (or DURATION) AND providing
+# `denominator_event_name`. The engine's delta-method branch detects
+# this automatically.
+#
+# `is_guardrail` on a CustomMetric is a UX hint shown in the builder;
+# the engine enforces guardrail logic via per-experiment
+# `GuardrailConfig` rows, not this flag.
+
+
+class CustomMetric(Base):
+    __tablename__ = "custom_metrics"
+
+    id                       = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key                      = Column(String(100), nullable=False, unique=True)
+    name                     = Column(String(255), nullable=False)
+    description              = Column(Text, nullable=True)
+    event_name               = Column(String(255), nullable=False)
+    aggregation              = Column(SAEnum(MetricAggregation, values_callable=_ENUM_VALUES), nullable=False)
+    metric_type              = Column(SAEnum(MetricType), nullable=False)
+    # AND-combined JSONB filter list applied to `events.properties`.
+    filters                  = Column(JSONB, nullable=True)
+    # Ratio-metric denominator — when set, metric is treated as a ratio
+    # (numerator per denominator). Mutually exclusive with CONVERSION
+    # (validated at the schema layer).
+    denominator_event_name   = Column(String(255), nullable=True)
+    denominator_aggregation  = Column(SAEnum(MetricAggregation, values_callable=_ENUM_VALUES), nullable=True)
+    denominator_filters      = Column(JSONB, nullable=True)
+    # Hint shown in the metric builder UI; not enforced by the engine.
+    is_guardrail             = Column(Boolean, default=False, nullable=False)
+    created_by               = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at               = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at               = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    experiment_metrics = relationship("Metric", back_populates="custom_metric")
+    created_by_user    = relationship("User")
+
+    __table_args__ = (
+        Index("ix_custom_metrics_key", "key", unique=True),
+    )
+
+
+# Guardrails ────────────────────────────────────────────────────────
+#
+# M-011: Per-experiment guardrail threshold. A guardrail watches a
+# specific Metric (where `is_guardrail=True`) and flags the experiment
+# if the treatment's relative_lift crosses the configured threshold.
+#
+# - `direction` ("below"/"above") — which side of control is bad.
+#   direction="below" + threshold_pct=5 means "if treatment is more
+#   than 5% LOWER than control, fire". The most common case for
+#   revenue/duration metrics.
+#   direction="above" + threshold_pct=5 means "if treatment is more
+#   than 5% HIGHER than control, fire". Used for error-rate type
+#   guardrails where the treatment should NOT increase.
+#
+# - `severity` — "warning" adds an insight but does NOT block winner
+#   designation. "critical" sets `metric.guardrail_violated=True` and
+#   blocks any variant from being marked as `is_winner` (see
+#   `app/services/stats/engine.py`).
+#
+# A guardrail only fires when the variant's test is statistically
+# significant (avoids noise triggers). See
+# `app/services/guardrail_service.evaluate_metric_guardrails`.
+#
+# `threshold_pct` is expressed as a positive percentage (e.g. 5.0
+# means 5%). The service applies the sign internally based on
+# direction.
+
+class GuardrailConfig(Base):
+    __tablename__ = "guardrail_configs"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    experiment_id  = Column(UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="CASCADE"), nullable=False)
+    metric_id      = Column(UUID(as_uuid=True), ForeignKey("metrics.id",     ondelete="CASCADE"), nullable=False)
+    direction      = Column(SAEnum(GuardrailDirection, values_callable=_ENUM_VALUES), nullable=False)
+    threshold_pct  = Column(Float, nullable=False)
+    severity       = Column(SAEnum(GuardrailSeverity, values_callable=_ENUM_VALUES), nullable=False, server_default=text("'warning'"))
+    # If False, the rule exists but is not evaluated. Useful when a user
+    # drafts a config and wants to turn it on later without deleting it.
+    is_enabled     = Column(Boolean, nullable=False, server_default=text("true"))
+    created_by     = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at     = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    experiment      = relationship("Experiment", back_populates="guardrails")
+    metric          = relationship("Metric",     back_populates="guardrails")
+    created_by_user = relationship("User")
+
+    __table_args__ = (
+        # One config per (experiment, metric, direction, severity). Two
+        # guardrails on the same metric with different severities are
+        # allowed (warning + critical), but you cannot duplicate them.
+        UniqueConstraint(
+            "experiment_id", "metric_id", "direction", "severity",
+            name="uq_guardrail_exp_metric_dir_severity",
+        ),
+        Index("ix_guardrail_configs_experiment", "experiment_id"),
+        Index("ix_guardrail_configs_metric", "metric_id"),
     )

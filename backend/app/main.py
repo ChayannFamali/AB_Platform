@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.logging_config import configure_logging
-from app.routers import assignments, audit, auth, events, experiments, flags, health, holdouts, results, roles, segments, sse, stats
+from app.routers import assignments, audit, auth, custom_metrics, events, experiments, flags, guardrails, health, holdouts, results, roles, segments, sse, stats
 from app.logging_config import get_logger
 
 configure_logging()
@@ -83,3 +83,5 @@ app.include_router(assignments.router, prefix="/api/v1/sdk", tags=["sdk"])
 app.include_router(events.router,      prefix="/api/v1/sdk", tags=["sdk"])
 app.include_router(segments.router,    tags=["segments"])  # already has prefix="/api/v1/segments"
 app.include_router(holdouts.router,     tags=["holdouts"])  # already has prefix="/api/v1/holdouts"
+app.include_router(custom_metrics.router, tags=["custom-metrics"])  # already has prefix="/api/v1/custom-metrics"
+app.include_router(guardrails.router,     tags=["guardrails"])      # already has prefix="/api/v1/experiments"

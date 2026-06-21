@@ -73,6 +73,26 @@ def interpret(
             description="stats.insights.guardrailViolated.description",
         ))
 
+    # M-011: warning-severity guardrails fire informational insights.
+    # They do NOT block winner designation — that only happens on
+    # critical violations (the block above already handles that).
+    for m in metric_results:
+        if not m.is_guardrail:
+            continue
+        if (m.guardrail_warning_count or 0) <= 0:
+            continue
+        insights.append(Insight(
+            type="guardrail_warning",
+            severity=InsightSeverity.WARNING,
+            title="stats.insights.guardrailWarning.title",
+            description="stats.insights.guardrailWarning.description",
+            metric_id=str(m.metric_id),
+            params={
+                "metric_name": m.metric_name,
+                "warning_count": m.guardrail_warning_count,
+            },
+        ))
+
     for metric in metric_results:
         # SRM applies to the experiment as a whole — emit once
         if metric.srm.srm_detected and not srm_emitted:

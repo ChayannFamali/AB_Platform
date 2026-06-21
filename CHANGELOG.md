@@ -2,6 +2,89 @@
 
 ## [Unreleased]
 
+### Added
+- M-011: custom metrics subsystem — global, reusable metric templates
+  (event + aggregation + AND-combined property filters + optional
+  denominator for ratio metrics) snapshotted into per-experiment
+  `Metric` rows via `custom_metric_id`. New endpoints:
+  `GET/POST /api/v1/custom-metrics`, `GET/PATCH/DELETE
+  /api/v1/custom-metrics/{id}`, `GET /api/v1/custom-metrics/by-key/{key}`,
+  `POST /api/v1/custom-metrics/{id}/preview` (plain-English summary
+  + per-filter dry-run). RBAC: `metrics:read` / `metrics:write`.
+  Schema migration `0015_custom_metrics_guardrails`.
+- M-011: per-experiment guardrail subsystem. `GuardrailConfig` rows
+  attach to one of the experiment's metrics (where `is_guardrail=true`)
+  with `direction` ("below"/"above"), `threshold_pct` (positive %),
+  and `severity` ("warning"/"critical"). Critical violations set
+  `metric.guardrail_violated=True` and block the winner flag for ALL
+  primary metrics in the experiment; warning violations emit a new
+  `guardrail_warning` insight without blocking. Endpoints nested under
+  the experiment: `GET/POST /api/v1/experiments/{id}/guardrails`,
+  `PATCH/DELETE /api/v1/experiments/{id}/guardrails/{gid}`.
+  RBAC: `guardrails:read` / `guardrails:write`.
+- M-011: engine integration. `Metric.aggregation` (new nullable
+  column) overrides the engine's old `metric_type`-based default;
+  `Metric.filters` (JSONB list of `{field, operator, value}`) is
+  applied to `events.properties` at read time in the conversion,
+  revenue, and ratio SQL loaders. `custom_metric_id` back-FK on
+  `metrics` (ON DELETE SET NULL) preserves traceability. Engine
+  evaluation: when a metric has any `GuardrailConfig` rows,
+  `evaluate_metric_guardrails` checks each variant's `relative_lift`
+  against the configured direction × threshold — fires only when
+  `variant.is_significant=True` (avoids noise triggers). Legacy
+  fallback: metrics with `is_guardrail=True` but no GuardrailConfigs
+  still trip on "any significant negative effect" so pre-M-011
+  experiments continue to behave the same.
+- M-011: frontend — `/custom-metrics` list + builder pages (with
+  filter rows, ratio denominator, plain-English preview) and a new
+  "Guardrails" tab on the experiment detail page. Routes registered
+  in `App.jsx`; nav link added.
+
+### Notes
+- M-011 backend tests: 32 new tests in `test_m011_custom_metrics_guardrails.py`
+  — custom metric CRUD (12 cases including duplicate-key, invalid
+  operator, ratio with denominator, list pagination, delete,
+  custom-metric-id snapshot into experiment Metric), RBAC analyst
+  block, filter SQL generation (5 unit tests on `build_filter_clause`),
+  guardrail CRUD (5 cases including reject-non-guardrail-metric and
+  duplicate-severity), `check_threshold` cross-side matrix (7 unit
+  tests covering below/above × significant/not × inside/outside), and
+  `evaluate_metric_guardrails` integration (5 cases covering critical
+  blocking, warning not-blocking, non-guardrail-metric skip, no-fire
+  when not significant, mixed severities). Full backend suite
+  **71 passed** (`pytest tests/test_m011_custom_metrics_guardrails.py
+  tests/test_stats.py tests/test_integration.py -q`).
+- M-011 frontend tests: 4 new MetricFilterRow tests + 3 new
+  GuardrailsTab tests. Full frontend suite **94 passed** across 32
+  test files (`npm run test:run`).
+- M-011 frontend lint: clean (`npm run lint`).
+- M-011 frontend bundle: `npm run build` succeeds
+  (1073 KB JS / 316 KB gzipped — +34 KB on top of the M-010 baseline
+  for CustomMetricListPage + MetricBuilderPage + MetricFilterRow +
+  GuardrailsTab + extended ExperimentDetailPage).
+- M-011 migrations verified: `alembic upgrade head` and
+  `downgrade -1` both run cleanly on the test database. Migration
+  `0015_custom_metrics_guardrails` is a merge node with
+  `down_revision = ("0011_holdouts", "0014_api_key_scopes")` to
+  reconcile the existing two-head branch state.
+- M-011 enum labelling: PostgreSQL enum labels are lowercase
+  (`count`, `sum`, `below`, `warning`, …) to match the wire-format
+  strings. SAEnum declarations use `values_callable=lambda enum:
+  [e.value for e in enum]` so SQLAlchemy serialises the `.value`
+  instead of the `.name`.
+- M-011 backward compatibility: the engine still produces analysis
+  output for pre-M-011 experiments (rows with `aggregation IS NULL`
+  fall back to the legacy `metric_type`-based inference). Guardrail
+  semantics also fall back to the pre-M-011 "any negative significant
+  effect = violation" rule when a guardrail metric has zero
+  GuardrailConfig rows. Existing API responses now include the
+  three new Metric columns (`aggregation`, `filters`,
+  `custom_metric_id`) — they're nullable, so callers ignoring them
+  continue to work.
+- M-011 audit hooks: every `custom_metrics` and `guardrail_configs`
+  mutation writes an `audit_log` row with the appropriate
+  `resource_type` (`"custom_metric"` / `"guardrail_config"`).
+
 ### Notes
 - M-010 backend tests: 38 new tests pass (22 segment: 6 operator unit
   tests covering all 9 operators, 8 CRUD lifecycle, 1 rule CRUD, 3 AND

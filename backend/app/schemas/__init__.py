@@ -35,7 +35,30 @@ from app.schemas.experiment import (
     MutexGroupResponse,
     PaginatedExperiments,
     VariantCreate,
-    VariantResponse,ExperimentUpdate
+    VariantResponse,
+    ExperimentUpdate,
+)
+
+# Custom metric schemas (M-011)
+from app.schemas.custom_metric import (
+    CustomMetricCreate,
+    CustomMetricListItem,
+    CustomMetricPreviewRequest,
+    CustomMetricPreviewResponse,
+    CustomMetricResponse,
+    CustomMetricUpdate,
+    MetricFilterCreate,
+    PaginatedCustomMetrics,
+)
+
+# Guardrail schemas (M-011)
+from app.schemas.guardrail import (
+    GuardrailCheck,
+    GuardrailCreate,
+    GuardrailListItem,
+    GuardrailResponse,
+    GuardrailUpdate,
+    PaginatedGuardrails,
 )
 
 # Result schemas
@@ -165,6 +188,22 @@ __all__ = [
     "HoldoutGroupUpdate",
     "PaginatedExclusions",
     "PaginatedHoldouts",
+    # Custom metric (M-011)
+    "CustomMetricCreate",
+    "CustomMetricListItem",
+    "CustomMetricPreviewRequest",
+    "CustomMetricPreviewResponse",
+    "CustomMetricResponse",
+    "CustomMetricUpdate",
+    "MetricFilterCreate",
+    "PaginatedCustomMetrics",
+    # Guardrail (M-011)
+    "GuardrailCheck",
+    "GuardrailCreate",
+    "GuardrailListItem",
+    "GuardrailResponse",
+    "GuardrailUpdate",
+    "PaginatedGuardrails",
     # Enums
     "ExperimentStatus",
     "MetricType",

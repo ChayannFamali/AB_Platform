@@ -1,6 +1,6 @@
 from datetime import datetime
 from uuid import UUID
-from sqlalchemy import func 
+from sqlalchemy import func
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,70 @@ from sqlalchemy.orm import selectinload
 
 from app.models.db import Experiment, ExperimentStatus, Metric, MutexGroup, Variant
 from app.schemas.experiment import ExperimentCreate, MutexGroupCreate
+
+
+def _filters_to_dict(filters) -> list[dict] | None:
+    """Pydantic model instances → plain dicts for JSONB persistence."""
+    if filters is None:
+        return None
+    return [
+        {
+            "field":    f.field,
+            "operator": f.operator,
+            "value":    f.value,
+            "priority": f.priority,
+            "enabled":  f.enabled,
+        }
+        for f in filters
+    ]
+
+
+async def _resolve_metric_kwargs(db: AsyncSession, m) -> dict:
+    """
+    Build kwargs for constructing a per-experiment `Metric` row,
+    honouring the optional `custom_metric_id` snapshot (M-011).
+
+    When `m.custom_metric_id` is set:
+      - Load the CustomMetric.
+      - Snapshot event_name / aggregation / filters / denominator
+        (template wins over inline values).
+      - Persist `custom_metric_id` for traceability.
+    """
+    kwargs: dict = {
+        "name":                   m.name,
+        "event_name":             m.event_name,
+        "denominator_event_name": m.denominator_event_name,
+        "metric_type":            m.metric_type,
+        "is_primary":             m.is_primary,
+        "is_guardrail":           m.is_guardrail,
+        "aggregation":            m.aggregation,
+        "filters":                _filters_to_dict(m.filters),
+    }
+    if m.custom_metric_id is None:
+        return kwargs
+
+    # Lazy import to keep the experiment_service ↔ custom_metric_service
+    # dependency one-directional at module load.
+    from app.services.custom_metric_service import (
+        copy_to_metric,
+        get_custom_metric_by_id,
+    )
+    template = await get_custom_metric_by_id(db, m.custom_metric_id)
+    if template is None:
+        raise ValueError(f"CustomMetric {m.custom_metric_id} не найден")
+    snapshot = copy_to_metric(template)
+    # Template wins on event_name / aggregation / filters /
+    # denominator_event_name. Inline values are ignored when a template
+    # is provided (the template is the source of truth).
+    kwargs.update({
+        "event_name":               snapshot["event_name"],
+        "aggregation":              snapshot["aggregation"],
+        "metric_type":              snapshot["metric_type"],
+        "filters":                  snapshot["filters"],
+        "denominator_event_name":   snapshot["denominator_event_name"],
+        "custom_metric_id":         snapshot["custom_metric_id"],
+    })
+    return kwargs
 
 
 
@@ -80,13 +144,10 @@ async def create_experiment(db: AsyncSession, data: ExperimentCreate) -> Experim
         ))
 
     for m in data.metrics:
+        metric_kwargs = await _resolve_metric_kwargs(db, m)
         db.add(Metric(
             experiment_id=experiment.id,
-            name=m.name,
-            event_name=m.event_name,
-            metric_type=m.metric_type,
-            is_primary=m.is_primary,
-            is_guardrail=m.is_guardrail,
+            **metric_kwargs,
         ))
 
     await db.flush()

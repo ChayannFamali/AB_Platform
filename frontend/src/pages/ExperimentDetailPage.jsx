@@ -14,6 +14,7 @@ import ExportButton from '../components/experiment/ExportButton'
 import ExperimentResultsTab from '../components/experiment/ExperimentResultsTab'
 import ExperimentSettingsTab from '../components/experiment/ExperimentSettingsTab'
 import ExperimentStatusCard from '../components/experiment/ExperimentStatusCard'
+import GuardrailsTab from '../components/experiment/GuardrailsTab'
 import LoadingState from '../components/LoadingState'
 import { PageHeader } from '../components/PageContainer'
 import { toast } from '../hooks/use-toast'
@@ -26,7 +27,7 @@ const STATUS_VARIANT = {
   completed: 'info',
 }
 
-const TABS = ['overview', 'results', 'decisions', 'settings']
+const TABS = ['overview', 'results', 'guardrails', 'decisions', 'settings']
 const DEFAULT_TAB = 'overview'
 
 export default function ExperimentDetailPage() {
@@ -190,6 +191,9 @@ export default function ExperimentDetailPage() {
           <TabsTrigger value="results">
             {t('experiments.tabs.results')}
           </TabsTrigger>
+          <TabsTrigger value="guardrails">
+            {t('experiments.tabs.guardrails')}
+          </TabsTrigger>
           <TabsTrigger value="decisions">
             {t('experiments.tabs.decisions')}
           </TabsTrigger>
@@ -208,6 +212,10 @@ export default function ExperimentDetailPage() {
             experimentStatus={exp.status}
             isSequential={exp.is_sequential}
           />
+        </TabsContent>
+
+        <TabsContent value="guardrails">
+          <GuardrailsTab experiment={exp} />
         </TabsContent>
 
         <TabsContent value="decisions">

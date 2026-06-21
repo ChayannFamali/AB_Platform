@@ -25,16 +25,18 @@ import PageContainer from './components/PageContainer'
 import ApiKeysPage from './pages/ApiKeysPage'
 import AuditLogPage from './pages/AuditLogPage'
 import CreateExperimentWizard from './pages/CreateExperimentWizard'
+import CustomMetricListPage from './pages/CustomMetricListPage'
 import DashboardPage from './pages/DashboardPage'
 import ExperimentDetailPage from './pages/ExperimentDetailPage'
 import ExperimentList from './pages/ExperimentList'
 import FlagDetailPage from './pages/FlagDetailPage'
 import FlagListPage from './pages/FlagListPage'
 import LoginPage from './pages/LoginPage'
-import SegmentBuilderPage from './pages/SegmentBuilderPage'
-import SegmentListPage from './pages/SegmentListPage'
+import MetricBuilderPage from './pages/MetricBuilderPage'
 import RegisterPage from './pages/RegisterPage'
 import SampleSizeCalculatorPage from './pages/SampleSizeCalculatorPage'
+import SegmentBuilderPage from './pages/SegmentBuilderPage'
+import SegmentListPage from './pages/SegmentListPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
 
@@ -103,6 +105,12 @@ export default function App() {
               className="text-sm text-muted-foreground hover:text-foreground"
             >
               {t('segments.navTitle')}
+            </Link>
+            <Link
+              to="/custom-metrics"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {t('customMetrics.navTitle')}
             </Link>
             <Link
               to="/settings"
@@ -306,6 +314,32 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <SegmentBuilderPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/custom-metrics"
+              element={
+                <ProtectedRoute>
+                  <PageContainer>
+                    <CustomMetricListPage />
+                  </PageContainer>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/custom-metrics/new"
+              element={
+                <ProtectedRoute>
+                  <MetricBuilderPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/custom-metrics/:key"
+              element={
+                <ProtectedRoute>
+                  <MetricBuilderPage />
                 </ProtectedRoute>
               }
             />
