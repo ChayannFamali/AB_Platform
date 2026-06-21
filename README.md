@@ -7,6 +7,11 @@ Deploy in one command. Start testing in minutes.
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/fastapi-0.109%2B-green)
 
+
+## Preview
+
+![AB Platform screenshot](example.png)
+
 ---
 
 ## The problem
